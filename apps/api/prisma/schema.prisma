@@ -1,0 +1,238 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  telegramId String   @unique
+  username   String?
+  firstName  String?
+  lastName   String?
+  avatarUrl  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  ownedRooms            Room[]           @relation("RoomOwner")
+  roomPlayers           RoomPlayer[]
+  createdRebuyEvents    RebuyEvent[]     @relation("RebuyCreatedBy")
+  cancelledRebuyEvents  RebuyEvent[]     @relation("RebuyCancelledBy")
+  idempotencyKeys       IdempotencyKey[]
+  closedSettlements     Settlement[]     @relation("SettlementClosedBy")
+  playerStats           PlayerStats?
+
+  @@index([telegramId])
+}
+
+model Room {
+  id               String            @id @default(cuid())
+  ownerUserId      String
+  title            String
+  currency         String
+  rebuyAmountMinor BigInt
+  startingStack    Int?
+  gameType         GameType          @default(SIMPLE_TRACKING)
+  rebuyPermission  RebuyPermission   @default(PLAYER_SELF)
+  status           RoomStatus        @default(WAITING)
+  inviteCode       String            @unique
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  startedAt        DateTime?
+  settlementStartedAt DateTime?
+  closedAt         DateTime?
+  cancelledAt      DateTime?
+
+  owner           User             @relation("RoomOwner", fields: [ownerUserId], references: [id])
+  players         RoomPlayer[]
+  rebuyEvents     RebuyEvent[]
+  idempotencyKeys IdempotencyKey[]
+  settlements     Settlement[]
+
+  @@index([ownerUserId])
+  @@index([status])
+  @@index([inviteCode])
+}
+
+model RoomPlayer {
+  id               String           @id @default(cuid())
+  roomId           String
+  userId           String
+  displayName      String?
+  role             RoomPlayerRole   @default(PLAYER)
+  status           RoomPlayerStatus @default(ACTIVE)
+  joinedAt         DateTime         @default(now())
+  removedAt        DateTime?
+  finalAmountMinor BigInt?
+  netResultMinor   BigInt?
+
+  room        Room          @relation(fields: [roomId], references: [id])
+  user        User          @relation(fields: [userId], references: [id])
+  rebuyEvents RebuyEvent[]
+  transfersFrom SettlementTransfer[] @relation("SettlementTransferFromPlayer")
+  transfersTo   SettlementTransfer[] @relation("SettlementTransferToPlayer")
+
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@index([userId])
+}
+
+model RebuyEvent {
+  id                 String            @id @default(cuid())
+  roomId             String
+  roomPlayerId       String
+  amountMinor        BigInt
+  createdByUserId    String
+  source             RebuyEventSource
+  status             RebuyEventStatus  @default(ACTIVE)
+  createdAt          DateTime          @default(now())
+  cancelledAt        DateTime?
+  cancelledByUserId  String?
+  cancellationReason String?
+
+  room            Room             @relation(fields: [roomId], references: [id])
+  roomPlayer      RoomPlayer       @relation(fields: [roomPlayerId], references: [id])
+  createdByUser   User             @relation("RebuyCreatedBy", fields: [createdByUserId], references: [id])
+  cancelledByUser User?            @relation("RebuyCancelledBy", fields: [cancelledByUserId], references: [id])
+  idempotencyKeys IdempotencyKey[]
+
+  @@index([roomId, createdAt(sort: Desc)])
+  @@index([roomPlayerId, status])
+  @@index([createdByUserId])
+  @@index([cancelledByUserId])
+}
+
+model IdempotencyKey {
+  id             String            @id @default(cuid())
+  userId         String
+  roomId         String
+  action         IdempotencyAction
+  idempotencyKey String
+  requestHash    String
+  responseJson   Json?
+  rebuyEventId   String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id])
+  room       Room       @relation(fields: [roomId], references: [id])
+  rebuyEvent RebuyEvent? @relation(fields: [rebuyEventId], references: [id])
+
+  @@unique([userId, action, idempotencyKey])
+  @@index([roomId])
+  @@index([rebuyEventId])
+}
+
+model Settlement {
+  id                    String           @id @default(cuid())
+  roomId                String
+  status                SettlementStatus @default(DRAFT)
+  totalBuyinsMinor      BigInt
+  totalFinalAmountMinor BigInt
+  differenceMinor       BigInt
+  calculatedAt          DateTime         @default(now())
+  closedByUserId        String?
+
+  room         Room                  @relation(fields: [roomId], references: [id])
+  closedByUser User?                 @relation("SettlementClosedBy", fields: [closedByUserId], references: [id])
+  transfers    SettlementTransfer[]
+
+  @@index([roomId])
+  @@index([closedByUserId])
+}
+
+model SettlementTransfer {
+  id               String                   @id @default(cuid())
+  settlementId     String
+  fromRoomPlayerId String
+  toRoomPlayerId   String
+  amountMinor      BigInt
+  status           SettlementTransferStatus @default(PENDING)
+
+  settlement Settlement @relation(fields: [settlementId], references: [id])
+  fromPlayer  RoomPlayer @relation("SettlementTransferFromPlayer", fields: [fromRoomPlayerId], references: [id])
+  toPlayer    RoomPlayer @relation("SettlementTransferToPlayer", fields: [toRoomPlayerId], references: [id])
+
+  @@index([settlementId])
+  @@index([fromRoomPlayerId])
+  @@index([toRoomPlayerId])
+}
+
+model PlayerStats {
+  userId            String   @id
+  gamesCount        Int      @default(0)
+  totalBuyinsMinor  BigInt   @default(0)
+  totalProfitMinor  BigInt   @default(0)
+  avgProfitMinor    BigInt   @default(0)
+  roiBps            Int      @default(0)
+  winRateBps        Int      @default(0)
+  stabilityScoreBps Int      @default(0)
+  pokerScore        Int      @default(0)
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum RoomStatus {
+  DRAFT
+  WAITING
+  RUNNING
+  SETTLEMENT
+  CLOSED
+  CANCELLED
+}
+
+enum RoomPlayerRole {
+  OWNER
+  ADMIN
+  PLAYER
+}
+
+enum RoomPlayerStatus {
+  ACTIVE
+  REMOVED
+  LEFT
+}
+
+enum GameType {
+  CASH
+  TOURNAMENT
+  SIMPLE_TRACKING
+}
+
+enum RebuyPermission {
+  PLAYER_SELF
+  ADMIN_APPROVAL
+  ADMIN_ONLY
+}
+
+enum RebuyEventSource {
+  PLAYER_SELF
+  ADMIN_FOR_PLAYER
+  SYSTEM_IMPORT
+}
+
+enum RebuyEventStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum IdempotencyAction {
+  CREATE_REBUY
+  CANCEL_REBUY
+}
+
+enum SettlementStatus {
+  DRAFT
+  VALID
+  CLOSED
+}
+
+enum SettlementTransferStatus {
+  PENDING
+  MARKED_PAID
+  CANCELLED
+}

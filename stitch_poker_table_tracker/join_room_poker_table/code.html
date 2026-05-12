@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="ru"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error-container": "#93000a",
+                    "primary": "#ffffff",
+                    "on-tertiary-container": "#636565",
+                    "on-primary-container": "#636565",
+                    "primary-fixed": "#e2e2e2",
+                    "tertiary-container": "#e2e2e2",
+                    "on-tertiary-fixed": "#1a1c1c",
+                    "error": "#ffb4ab",
+                    "on-primary": "#2f3131",
+                    "secondary": "#4edea3",
+                    "background": "#141313",
+                    "primary-fixed-dim": "#c6c6c7",
+                    "on-error": "#690005",
+                    "inverse-surface": "#e5e2e1",
+                    "on-secondary-fixed-variant": "#005236",
+                    "surface-bright": "#3a3939",
+                    "on-surface-variant": "#c4c7c8",
+                    "on-secondary": "#003824",
+                    "surface-container-low": "#1c1b1b",
+                    "surface-variant": "#353434",
+                    "tertiary": "#ffffff",
+                    "inverse-primary": "#5d5f5f",
+                    "on-error-container": "#ffdad6",
+                    "on-background": "#e5e2e1",
+                    "on-surface": "#e5e2e1",
+                    "surface-container-highest": "#353434",
+                    "secondary-fixed-dim": "#4edea3",
+                    "tertiary-fixed-dim": "#c6c6c7",
+                    "outline": "#8e9192",
+                    "surface-tint": "#c6c6c7",
+                    "inverse-on-surface": "#313030",
+                    "on-tertiary": "#2f3131",
+                    "tertiary-fixed": "#e2e2e2",
+                    "on-secondary-fixed": "#002113",
+                    "on-primary-fixed": "#1a1c1c",
+                    "surface-container-high": "#2a2a2a",
+                    "primary-container": "#e2e2e2",
+                    "on-primary-fixed-variant": "#454747",
+                    "surface-container-lowest": "#0e0e0e",
+                    "outline-variant": "#444748",
+                    "on-secondary-container": "#00311f",
+                    "surface-container": "#201f1f",
+                    "surface": "#141313",
+                    "on-tertiary-fixed-variant": "#454747",
+                    "secondary-fixed": "#6ffbbe",
+                    "secondary-container": "#00a572",
+                    "surface-dim": "#141313"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xs": "8px",
+                    "md": "16px",
+                    "sm": "12px",
+                    "lg": "24px",
+                    "base": "4px",
+                    "safe-area-inset": "16px",
+                    "xl": "32px"
+            },
+            "fontFamily": {
+                    "display-lg": ["Hanken Grotesk"],
+                    "body-md": ["Inter"],
+                    "title-sm": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "headline-md": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0F0F0F;
+            color: #e5e2e1;
+            -webkit-font-smoothing: antialiased;
+        }
+        .glass-card {
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="font-body-md text-body-md overflow-x-hidden">
+<!-- Top Navigation Anchor (As per JSON hierarchy) -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-md h-16 bg-background border-b border-white/10">
+<div class="flex items-center gap-xs">
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBoe_YLgMeHg0FJnYulYA64s8gFVkXjRIuIYfYhGiGPfodQ2rHgnq3ogGecMpzYkvZxr2Wcfdw64x95Qw1ppTltcWAwG31TDfZ7i69H7A0PiUimcPbHwF64iJ3JFVP5iNb5ORFueW0K1YF0IvuzwGp_nGdobaXjfHUJ1rkmSz74Vk6AWT_6X5Q-Qv2NG4JsXAx4WLhWWSZxZkFGE4h7X2DrMCUU45h-Rg1E-X2lXKtHNq3klWQ8qWvb0niiiPv_Sju5IACgi2_tcgY"/>
+</div>
+<span class="font-display-lg text-display-lg font-bold text-primary">Poker Table</span>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="min-h-screen pt-24 pb-32 px-md flex flex-col items-center justify-center relative overflow-hidden">
+<!-- Ambient Background Element -->
+<div class="absolute top-1/4 -right-24 w-64 h-64 bg-secondary/10 blur-[100px] rounded-full"></div>
+<div class="absolute bottom-1/4 -left-24 w-64 h-64 bg-primary/5 blur-[100px] rounded-full"></div>
+<!-- Invitation Context -->
+<div class="w-full max-w-md flex flex-col items-center text-center">
+<!-- Host Avatar Cluster -->
+<div class="relative mb-lg">
+<div class="w-24 h-24 rounded-full border-2 border-secondary p-1">
+<img alt="Denis Avatar" class="w-full h-full rounded-full object-cover grayscale" data-alt="A professional close-up portrait of a man in his thirties with a focused expression, set against a dark moody architectural background. The image has a high-end fintech aesthetic with deep shadows and subtle emerald green lighting accents that match the dark mode UI design system." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXnENi43je2v2U_nGMcwuRdBJTasq-tPi7PgfC_w_V6k8yrGaOBc7i_TWgz3azMCXxARs8n4PLIDxCyR-8E28Pr4dkwdamVUlsgozlgFdyNlotYyKtraLjBmFDz4rmCnvH2vmu6W7j0ZrWjJh660OBKCEVFNN5YmiuET4AFi4ZKhgmaZRBmnWzHytLK6isOXl0uGcSl4p8GjLGsuApAZx-3-hG_Fzw1_1JnnooLdFwAhIed2-j8t5lCW4B24DByVY5lyxZJ1IJ5sw"/>
+</div>
+<div class="absolute -bottom-2 -right-2 bg-secondary text-on-secondary w-8 h-8 rounded-full flex items-center justify-center border-4 border-background">
+<span class="material-symbols-outlined text-[18px]">style</span>
+</div>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-background mb-xs">Вы приглашены на:</h2>
+<h1 class="font-display-lg text-display-lg text-primary mb-xl tracking-tight">Покер у Дениса</h1>
+<!-- Bento Info Grid -->
+<div class="grid grid-cols-2 gap-sm w-full mb-xl">
+<div class="glass-card p-md rounded-xl flex flex-col items-center justify-center text-center"><span class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-base">Ребай</span><span class="font-title-sm text-title-sm text-primary">1 000 ₽</span></div>
+<div class="glass-card p-md rounded-xl flex flex-col items-center justify-center text-center"><span class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-base">Стартовый стек</span><span class="font-title-sm text-title-sm text-primary">10 000 фишек</span></div>
+<div class="glass-card p-md rounded-xl flex flex-col items-center justify-center text-center col-span-2 border-secondary/20"><div class="flex items-center gap-xs"><span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">groups</span><span class="font-title-sm text-title-sm text-primary">Присоединилось игроков: 5</span></div><div class="w-full bg-white/10 h-1 rounded-full mt-sm overflow-hidden"><div class="bg-secondary h-full" style="width: 55%"></div></div></div>
+</div>
+<!-- Interaction Area -->
+<div class="w-full space-y-md">
+<button class="w-full h-14 bg-secondary text-on-secondary font-title-sm text-title-sm rounded-xl flex items-center justify-center gap-xs active:scale-95 transition-all shadow-[0_8px_24px_rgba(78,222,163,0.15)]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">login</span>
+                    Присоединиться к игре
+                </button>
+<button class="w-full h-14 bg-surface-container-high text-primary font-title-sm text-title-sm rounded-xl flex items-center justify-center gap-xs active:scale-95 transition-all border border-white/5">
+<span class="material-symbols-outlined">send</span>
+                    Открыть в Telegram
+                </button>
+<p class="font-body-sm text-body-sm text-on-surface-variant px-lg mt-md">
+                    Нажимая кнопку, вы подтверждаете согласие с правилами клуба AceStake.
+                </p>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Shell (Relevance: Top-level destination placeholder) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-md pb-lg pt-sm bg-surface-container/80 backdrop-blur-xl border-t border-white/10 rounded-t-xl">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-caps text-label-caps">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary font-bold transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="style" style="font-variation-settings: 'FILL' 1;">style</span>
+<span class="font-label-caps text-label-caps">Games</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span>
+<span class="font-label-caps text-label-caps">Ranking</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-caps text-label-caps">Profile</span>
+</a>
+</nav>
+<!-- Transactional Focused UI: No FAB on landing screen as per UX guidelines -->
+</body></html>

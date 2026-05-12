@@ -1,0 +1,2 @@
+export const USERS_REPOSITORY = Symbol("USERS_REPOSITORY");
+export const SESSION_TOKEN_SERVICE = Symbol("SESSION_TOKEN_SERVICE");

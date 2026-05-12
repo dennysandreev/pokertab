@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="ru"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Hanken+Grotesk:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-lowest": "#0e0e0e",
+                        "secondary-fixed-dim": "#4edea3",
+                        "on-tertiary": "#2f3131",
+                        "tertiary": "#ffffff",
+                        "surface": "#141313",
+                        "secondary-container": "#00a572",
+                        "secondary": "#4edea3",
+                        "on-secondary": "#003824",
+                        "on-secondary-fixed-variant": "#005236",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-low": "#1c1b1b",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "surface-dim": "#141313",
+                        "on-primary-fixed-variant": "#454747",
+                        "inverse-on-surface": "#313030",
+                        "tertiary-container": "#e2e2e2",
+                        "on-surface": "#e5e2e1",
+                        "surface-container-high": "#2a2a2a",
+                        "surface-variant": "#353434",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "on-primary-container": "#636565",
+                        "surface-tint": "#c6c6c7",
+                        "on-surface-variant": "#c4c7c8",
+                        "on-error": "#690005",
+                        "on-tertiary-container": "#636565",
+                        "background": "#141313",
+                        "error": "#ffb4ab",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "primary-fixed-dim": "#c6c6c7",
+                        "on-primary": "#2f3131",
+                        "inverse-primary": "#5d5f5f",
+                        "secondary-fixed": "#6ffbbe",
+                        "on-secondary-fixed": "#002113",
+                        "inverse-surface": "#e5e2e1",
+                        "surface-container-highest": "#353434",
+                        "outline": "#8e9192",
+                        "surface-container": "#201f1f",
+                        "primary-fixed": "#e2e2e2",
+                        "primary-container": "#e2e2e2",
+                        "primary": "#ffffff",
+                        "outline-variant": "#444748",
+                        "on-secondary-container": "#00311f",
+                        "error-container": "#93000a",
+                        "tertiary-fixed": "#e2e2e2",
+                        "surface-bright": "#3a3939",
+                        "on-primary-fixed": "#1a1c1c",
+                        "on-background": "#e5e2e1"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "12px",
+                        "safe-area-inset": "16px",
+                        "base": "4px",
+                        "xl": "32px",
+                        "xs": "8px",
+                        "md": "16px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Hanken Grotesk"],
+                        "title-sm": ["Inter"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #141313;
+            color: #e5e2e1;
+            -webkit-font-smoothing: antialiased;
+        }
+        .glass-panel {
+            background: rgba(32, 31, 31, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md">
+<!-- Top Navigation Bar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-md h-16 bg-background border-b border-white/5">
+<div class="flex items-center gap-sm">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-bright/10 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<h1 class="font-display-lg text-headline-md font-bold text-primary">Create Room</h1>
+</div>
+<div class="flex items-center bg-surface-container-high px-sm py-xs rounded-full border border-white/5">
+<span class="font-label-caps text-secondary mr-xs">ID: </span>
+<span class="font-body-sm font-bold">2849</span>
+</div>
+</header>
+<main class="pt-24 pb-32 px-md max-w-md mx-auto min-h-screen">
+<!-- Hero Visual Section (Subtle) -->
+<div class="relative w-full h-32 rounded-xl overflow-hidden mb-lg glass-panel">
+<img alt="Poker Table" class="w-full h-full object-cover opacity-20 mix-blend-luminosity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnQRuybBZlYjpDNc0mouxe76sx4sGwY1Qn--mpD8vfBFN0l2r2PCN-RQa02H0UOj9K223tA8ehbnV-gKZzboe66iokGI1WuPTEiI9r1iyOx-KNMn0yVtQhZGAouOMsGeb9giSyP-P8fjntXwb0i2IAaW-mO7t8B9fQDWUDVR7INDmt8-mVmfdlGRCq5g-TElyOqcogWXM24c4CGD5XvqNDeXYqYOB6mvZn6SxnOhvZ6oJ1G9Xb7WuYuNCCy3it71o7PODGNs4jNPw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container to-transparent"></div>
+<div class="absolute bottom-md left-md">
+<p class="font-label-caps text-secondary uppercase tracking-widest mb-xs">Настройка стола</p>
+<h2 class="font-display-lg text-title-sm text-primary">Новая игра</h2>
+</div>
+</div>
+<!-- Creation Form -->
+<form class="space-y-lg">
+<!-- Room Name -->
+<div class="space-y-xs">
+<label class="font-label-caps text-on-surface-variant ml-xs">Название комнаты</label>
+<div class="relative">
+<input class="w-full h-[56px] bg-surface-container rounded-xl px-md border border-white/10 focus:border-secondary focus:ring-0 text-body-md transition-all placeholder:text-on-surface-variant/40" placeholder="Например: Покер у Дениса" type="text"/>
+<span class="material-symbols-outlined absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant/40">edit_note</span>
+</div>
+</div>
+<!-- Currency Selection -->
+<div class="space-y-xs">
+<label class="font-label-caps text-on-surface-variant ml-xs">Валюта игры</label>
+<div class="grid grid-cols-3 gap-sm">
+<button class="h-12 flex items-center justify-center rounded-xl bg-surface-container-high border-2 border-secondary text-primary font-bold" type="button">RUB</button>
+<button class="h-12 flex items-center justify-center rounded-xl bg-surface-container border border-white/10 text-on-surface-variant hover:bg-surface-bright/10" type="button">USD</button>
+<button class="h-12 flex items-center justify-center rounded-xl bg-surface-container border border-white/10 text-on-surface-variant hover:bg-surface-bright/10" type="button">EUR</button>
+</div>
+</div>
+<!-- Rebuy Amount (Visually Highlighted) -->
+<div class="p-lg rounded-2xl bg-secondary/5 border border-secondary/20 space-y-sm shadow-lg shadow-secondary/5">
+<div class="flex items-center justify-between">
+<label class="font-label-caps text-secondary flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">payments</span>
+                        Сумма ребая
+                    </label>
+</div>
+<div class="flex items-baseline gap-xs">
+<input class="w-full bg-transparent border-none p-0 text-display-lg font-display-lg text-primary focus:ring-0 placeholder:text-primary/20" placeholder="1 000" type="number" value="1000"/>
+<span class="text-headline-md font-display-lg text-secondary">₽</span>
+</div>
+<p class="font-body-sm text-on-surface-variant/60">Фиксированная сумма для пополнения</p>
+</div>
+<!-- Grid for Stack and Type -->
+<div class="grid grid-cols-1 gap-lg">
+<!-- Starting Stack -->
+<div class="space-y-xs">
+<label class="font-label-caps text-on-surface-variant ml-xs">Начальный стек</label>
+<div class="relative">
+<input class="w-full h-14 bg-surface-container rounded-xl px-md border border-white/10 focus:border-secondary focus:ring-0 text-body-md" placeholder="10 000 фишек" type="number" value="10000"/>
+<span class="absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant/60 font-body-sm">фишек</span>
+</div>
+</div>
+<!-- Game Type -->
+<div class="space-y-xs">
+<label class="font-label-caps text-on-surface-variant ml-xs">Тип игры</label>
+<div class="flex flex-wrap gap-xs">
+<button class="px-md py-sm rounded-full bg-secondary text-on-secondary font-bold text-body-sm transition-all" type="button">Кеш-игра</button>
+<button class="px-md py-sm rounded-full bg-surface-container border border-white/10 text-on-surface-variant font-medium text-body-sm hover:bg-surface-bright/10" type="button">Турнир</button>
+<button class="px-md py-sm rounded-full bg-surface-container border border-white/10 text-on-surface-variant font-medium text-body-sm hover:bg-surface-bright/10" type="button">Простой трекинг</button>
+</div>
+</div>
+</div>
+<!-- Rebuy Permissions -->
+<div class="space-y-xs pt-xs">
+<label class="font-label-caps text-on-surface-variant ml-xs">Права на ребай</label>
+<div class="space-y-sm">
+<label class="flex items-center justify-between p-md glass-panel rounded-xl border-secondary/40">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-secondary">person_add</span>
+<span class="font-body-md text-primary">Игроки сами делают ребаи</span>
+</div>
+<input checked="" class="w-5 h-5 text-secondary bg-surface-container border-white/20 focus:ring-offset-background" name="rebuy_perm" type="radio"/>
+</label>
+<label class="flex items-center justify-between p-md glass-panel rounded-xl opacity-60">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined">verified_user</span>
+<span class="font-body-md text-primary">Админ подтверждает ребаи</span>
+</div>
+<input class="w-5 h-5 text-secondary bg-surface-container border-white/20 focus:ring-offset-background" name="rebuy_perm" type="radio"/>
+</label>
+<label class="flex items-center justify-between p-md glass-panel rounded-xl opacity-60">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined">admin_panel_settings</span>
+<span class="font-body-md text-primary">Только админ добавляет ребаи</span>
+</div>
+<input class="w-5 h-5 text-secondary bg-surface-container border-white/20 focus:ring-offset-background" name="rebuy_perm" type="radio"/>
+</label>
+</div>
+</div>
+<!-- Submit Button Area -->
+<div class="pt-lg">
+<button class="w-full h-14 bg-secondary text-on-secondary font-bold text-title-sm rounded-xl active:scale-95 transition-all flex items-center justify-center gap-xs shadow-lg shadow-secondary/20" type="submit">Create Room <span class="material-symbols-outlined">add_circle</span></button>
+<p class="text-center mt-md font-body-sm text-on-surface-variant/40 px-lg">
+                    Создавая комнату, вы принимаете правила честной игры AceStake.
+                </p>
+</div>
+</form>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-md pb-lg pt-sm bg-surface-container-lowest/90 backdrop-blur-xl border-t border-white/5">
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-caps text-[10px] mt-1">Главная</span>
+</div>
+<div class="flex flex-col items-center justify-center text-secondary font-bold active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined" data-icon="style">style</span>
+<span class="font-label-caps text-[10px] mt-1">Игры</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span>
+<span class="font-label-caps text-[10px] mt-1">Рейтинг</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-caps text-[10px] mt-1">Профиль</span>
+</div>
+</nav>
+<!-- Safe area spacing for mobile -->
+<div class="h-24 md:hidden"></div>
+</body></html>

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="ru"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#454747",
+                    "on-secondary-fixed": "#002113",
+                    "on-error": "#690005",
+                    "primary-container": "#e2e2e2",
+                    "on-surface": "#e5e2e1",
+                    "on-primary-fixed": "#1a1c1c",
+                    "on-background": "#e5e2e1",
+                    "surface-container-low": "#1c1b1b",
+                    "surface-container-highest": "#353434",
+                    "secondary-fixed-dim": "#4edea3",
+                    "outline": "#8e9192",
+                    "on-secondary": "#003824",
+                    "on-secondary-fixed-variant": "#005236",
+                    "on-primary-fixed-variant": "#454747",
+                    "surface-tint": "#c6c6c7",
+                    "primary-fixed": "#e2e2e2",
+                    "on-surface-variant": "#c4c7c8",
+                    "tertiary-container": "#e2e2e2",
+                    "secondary-fixed": "#6ffbbe",
+                    "surface-container-lowest": "#0e0e0e",
+                    "tertiary-fixed": "#e2e2e2",
+                    "tertiary-fixed-dim": "#c6c6c7",
+                    "on-tertiary": "#2f3131",
+                    "surface-bright": "#3a3939",
+                    "surface-dim": "#141313",
+                    "error-container": "#93000a",
+                    "primary": "#ffffff",
+                    "error": "#ffb4ab",
+                    "inverse-surface": "#e5e2e1",
+                    "surface-container-high": "#2a2a2a",
+                    "secondary-container": "#00a572",
+                    "on-error-container": "#ffdad6",
+                    "tertiary": "#ffffff",
+                    "inverse-primary": "#5d5f5f",
+                    "on-secondary-container": "#00311f",
+                    "on-tertiary-container": "#636565",
+                    "surface-container": "#201f1f",
+                    "background": "#141313",
+                    "primary-fixed-dim": "#c6c6c7",
+                    "on-tertiary-fixed": "#1a1c1c",
+                    "on-primary": "#2f3131",
+                    "surface-variant": "#353434",
+                    "surface": "#141313",
+                    "outline-variant": "#444748",
+                    "inverse-on-surface": "#313030",
+                    "on-primary-container": "#636565",
+                    "secondary": "#4edea3"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "safe-area-inset": "16px",
+                    "md": "16px",
+                    "xs": "8px",
+                    "sm": "12px",
+                    "lg": "24px",
+                    "xl": "32px",
+                    "base": "4px"
+            },
+            "fontFamily": {
+                    "body-md": ["Inter"],
+                    "title-sm": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "display-lg": ["Hanken Grotesk"],
+                    "body-sm": ["Inter"],
+                    "headline-md": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            min-height: max(884px, 100dvh);
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen pb-32">
+<!-- Top Navigation Anchor -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-md h-16 bg-background border-b border-white/10">
+<div class="flex items-center gap-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden border border-white/10">
+<img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8n2ZQvRiDfoZ2xzr7SwgrXfGUg9Iu4_6AmPRw4NBwZ99IVVa4Oc9h3fCUMK-vLBWEPTCiDHBic9sxVDUBmIPlqppQgu-qvJ20OA_aRf1B9GUXY9s6ghXmo2CpRKdOv--qM_j0RP_J1Q6UbJ9eJ20V5fKxbgRRdZHLOL96FFH3Qf0n7gBsnrARPrSNIVQH-gscXK715DEQvs2GtEX-mE1b9pAAPI25nQfaobM1IRkfEA4Pd0Bgbze91IFtd2zsY4vITYo5M256hHI"/>
+</div>
+<h1 class="font-display-lg text-display-lg font-bold text-primary">Poker Table</h1>
+</div>
+</header>
+<main class="mt-16 px-md pt-lg">
+<!-- Section Header -->
+<div class="mb-lg">
+<h2 class="font-headline-md text-headline-md text-primary mb-xs">Лидерборд</h2>
+<p class="font-body-sm text-on-surface-variant">Лучшие игроки экосистемы AceStake</p>
+</div>
+<!-- Primary Tab Navigation -->
+<div class="flex p-1 bg-surface-container-lowest rounded-xl border border-white/5 mb-xs">
+<button class="flex-1 py-md text-center rounded-lg font-label-caps text-secondary bg-surface-variant/20 transition-all">
+                Все игроки
+            </button>
+<button class="flex-1 py-md text-center rounded-lg font-label-caps text-on-surface-variant hover:bg-surface-bright/5 transition-all">
+                Играли со мной
+            </button>
+</div>
+<!-- Contextual Note (Visible when needed) -->
+<div class="mb-lg px-xs">
+<p class="font-body-sm text-on-surface-variant italic opacity-70 text-[12px]">Игроки, с которыми вы делили хотя бы один стол.</p>
+</div>
+<!-- Time Filters -->
+<div class="flex gap-xs mb-xl overflow-x-auto scrollbar-hide pb-1">
+<button class="px-md py-1.5 rounded-full bg-secondary text-on-secondary font-label-caps text-[11px] whitespace-nowrap">За все время</button>
+<button class="px-md py-1.5 rounded-full bg-surface-container-high text-on-surface-variant border border-white/5 font-label-caps text-[11px] whitespace-nowrap">В этом месяце</button>
+<button class="px-md py-1.5 rounded-full bg-surface-container-high text-on-surface-variant border border-white/5 font-label-caps text-[11px] whitespace-nowrap">Последние 10 игр</button>
+</div>
+<!-- Podium / Top 3 Bento -->
+<div class="grid grid-cols-3 gap-sm mb-xl items-end">
+<!-- Rank 2 -->
+<div class="glass-card rounded-xl p-xs flex flex-col items-center h-auto relative overflow-hidden pb-md">
+<div class="absolute top-0 left-0 w-full h-1 bg-on-surface-variant/30"></div>
+<div class="w-10 h-10 rounded-full border-2 border-on-surface-variant/30 mt-sm mb-xs overflow-hidden">
+<img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCln-FWC0-8K2o8tPEBAXiA3JF5tpZ0Ora55zfW4x4ha1dqvOP2O5zUcBVDtNhUrG4I-UjMHbFgLE-2Sv0OxxwAscrf032TCB6TpdBRQbD3Q110QyWI7P0tJoHE-g5gfE983QJi__xBKyknAKtzkM9BdTxrOh89Q88BWdtF3ei4_BB5mZBmsV6Zab8MW4UBvjHARZzsoAq6BKU7gZKy2PImbRvOCbm9XRC9ZmKDrmZGVq6W7H_b0lya2t5Fu0a2WRIcUahiQYHBHIo"/>
+</div>
+<span class="font-label-caps text-on-surface-variant text-[9px]">#2 Alex_Pro</span>
+<span class="font-title-sm text-secondary text-[12px] mt-1">+4.2k $</span>
+<div class="mt-2 flex flex-col items-center gap-0.5">
+<span class="font-label-caps text-[8px] text-on-surface-variant">ROI 12%</span>
+<div class="flex items-center gap-1">
+<span class="font-bold text-primary text-[10px]">78</span>
+<span class="text-[8px] text-on-surface-variant">PS</span>
+</div>
+</div>
+</div>
+<!-- Rank 1: Denis -->
+<div class="glass-card rounded-xl p-xs flex flex-col items-center h-auto relative overflow-hidden border-secondary/30 scale-105 z-10 pb-md shadow-lg shadow-secondary/5">
+<div class="absolute top-0 left-0 w-full h-1 bg-secondary shadow-[0_0_8px_rgba(78,222,163,0.5)]"></div>
+<div class="w-14 h-14 rounded-full border-2 border-secondary mt-sm mb-xs overflow-hidden">
+<img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuApfRaRAkx46qljJ-Kv9-64XN3LDrEz4dcR0MCDHKjb26PnM7btJFTJiO_5Nh6DODy_HZaaohyCqWcG4G4tljNZl7zgUOh81arLtWIavUbdBoR3Giy-HJIarN0ERCXLiXh7CkzNItWoE-pYqrkTU6LxogwMghXFEwP4efkvyztWXCMIZw-sIrOZHAdds9VZtXBMtloPkQTYMRAPi0uftLGXsdEh5PBufJL8ITwr5XWp24o40zXAsRwOjGT1cyIeMyAmFw1qeFLyfTw"/>
+</div>
+<span class="font-label-caps text-secondary text-[10px]">#1 Denis</span>
+<span class="font-title-sm text-secondary text-[14px] mt-1 font-bold">+45 500 ₽</span>
+<div class="mt-2 flex flex-col items-center gap-0.5">
+<span class="font-label-caps text-[9px] text-on-surface-variant">ROI 18%</span>
+<div class="flex items-center gap-1">
+<span class="font-bold text-primary text-[12px]">84</span>
+<span class="text-[9px] text-on-surface-variant">PS</span>
+</div>
+</div>
+</div>
+<!-- Rank 3 -->
+<div class="glass-card rounded-xl p-xs flex flex-col items-center h-auto relative overflow-hidden pb-md">
+<div class="absolute top-0 left-0 w-full h-1 bg-orange-500/30"></div>
+<div class="w-10 h-10 rounded-full border-2 border-orange-500/30 mt-sm mb-xs overflow-hidden">
+<img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBcJg07QqBPZWu5AsgdT_T-lDbXa9a_VS9Utj36ynem-tWOQZ9OIyDjBEzUsvqJUFJP0mwViwcb8_FuuBOXmKJMiBWmLrsvg_MabLLpMLPlr_DcfySDhsPMlo0kKDcuWF01nKEbaFI7refINfsCNRVd-KL4lFmbKJ3I5oB0NXB_zpwHvh1kpZ-VAAWZbPkOfu2SVLT6mqMq9ZCHiwsyGGyyIFfLP8Bv5vkyxZhXZhpdggnIrQCr5KphqSZVY3CAdYA4TJj5iQaompU"/>
+</div>
+<span class="font-label-caps text-on-surface-variant text-[9px]">#3 StakeKing</span>
+<span class="font-title-sm text-secondary text-[12px] mt-1">+3.1k $</span>
+<div class="mt-2 flex flex-col items-center gap-0.5">
+<span class="font-label-caps text-[8px] text-on-surface-variant">ROI 15%</span>
+<div class="flex items-center gap-1">
+<span class="font-bold text-primary text-[10px]">72</span>
+<span class="text-[8px] text-on-surface-variant">PS</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Detailed Player List Header -->
+<div class="grid grid-cols-12 px-md py-xs font-label-caps text-on-surface-variant text-[9px] uppercase tracking-wider mb-xs border-b border-white/5">
+<div class="col-span-5">Игрок</div>
+<div class="col-span-3 text-right">Профит</div>
+<div class="col-span-2 text-right">ROI / Win</div>
+<div class="col-span-2 text-right">Score</div>
+</div>
+<!-- Leaderboard List -->
+<div class="space-y-sm">
+<!-- Item 4 -->
+<div class="glass-card rounded-xl p-md grid grid-cols-12 items-center active:scale-[0.98] transition-transform">
+<div class="col-span-5 flex items-center gap-sm">
+<span class="font-label-caps text-on-surface-variant w-3 text-[10px]">4</span>
+<div class="w-8 h-8 rounded-full bg-surface-bright/20 flex-shrink-0 overflow-hidden">
+<img alt="Player" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKJrKuBXXjU_oP7e8j9Yifqv37KhHmmdM1ujWAnkHEwf14JQ4HFVLFiE_y4fn6gRPHyuFOza8l4HHFI-Ho_vHQI2sJbbIl034yZHiJM-aMdR-QKQk3MrThVRb4u3Q_s-FYaAChccO5ie1pIhVcecyWMuS8xBTZHqWgtFXVut3Ki3dsxEaAdaou4lo_mtDqgbkPxUOwUQC5wpjzRO5IOjvD5VldhrxNGZKnw4g_6WpJoBUyACiQgKXXP9vShOIJaWbqz-aJOdqDmWA"/>
+</div>
+<span class="font-title-sm text-primary text-[13px] truncate">Viper_88</span>
+</div>
+<div class="col-span-3 text-right">
+<span class="font-label-caps text-secondary text-[12px]">+2.1k $</span>
+</div>
+<div class="col-span-2 text-right leading-tight">
+<div class="font-label-caps text-primary text-[10px]">12%</div>
+<div class="font-label-caps text-on-surface-variant text-[8px]">54% W</div>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-bold text-primary text-[13px]">68</span>
+</div>
+</div>
+<!-- Item 5 -->
+<div class="glass-card rounded-xl p-md grid grid-cols-12 items-center active:scale-[0.98] transition-transform">
+<div class="col-span-5 flex items-center gap-sm">
+<span class="font-label-caps text-on-surface-variant w-3 text-[10px]">5</span>
+<div class="w-8 h-8 rounded-full bg-surface-bright/20 flex-shrink-0 overflow-hidden">
+<img alt="Player" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8XJeVVDH_eIVvEjPbdP-yHcoM6Zaem4PSEhLh18L6D0uuQ6xDzhCISsFKMsjnoEwpnNvfvjUPZiVHzHu66CevIYO--nEeb7KQYO9EWoq2wbeIHqrOV-lkVs1avzWcLWtzS8V-ZbwI_gxkMr_J-XJRx9RlkQWGSjCCmOwXKwzEH3i7ZMJ759ZMzJHWBJ6L8tZzUnP3cchrAgNhVP--Boal2dxPTPOhw714eMsp3yYOaKHcz4IpVOqCW4MrcMitZC_NYVHlKQGsaZ4"/>
+</div>
+<span class="font-title-sm text-primary text-[13px] truncate">Dima_Ace</span>
+</div>
+<div class="col-span-3 text-right">
+<span class="font-label-caps text-secondary text-[12px]">+1.8k $</span>
+</div>
+<div class="col-span-2 text-right leading-tight">
+<div class="font-label-caps text-primary text-[10px]">9%</div>
+<div class="font-label-caps text-on-surface-variant text-[8px]">51% W</div>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-bold text-primary text-[13px]">64</span>
+</div>
+</div>
+<!-- Current User Perspective -->
+<div class="glass-card rounded-xl p-md grid grid-cols-12 items-center border-secondary/20 bg-secondary/5 ring-1 ring-secondary/10">
+<div class="col-span-5 flex items-center gap-sm">
+<span class="font-label-caps text-secondary w-3 text-[10px]">142</span>
+<div class="w-8 h-8 rounded-full bg-secondary flex-shrink-0 overflow-hidden flex items-center justify-center">
+<span class="text-on-secondary font-bold text-[10px]">Я</span>
+</div>
+<span class="font-title-sm text-primary text-[13px] truncate">Вы (Me)</span>
+</div>
+<div class="col-span-3 text-right">
+<span class="font-label-caps text-secondary text-[12px]">+1.2k $</span>
+</div>
+<div class="col-span-2 text-right leading-tight">
+<div class="font-label-caps text-primary text-[10px]">14%</div>
+<div class="font-label-caps text-on-surface-variant text-[8px]">58% W</div>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-bold text-secondary text-[13px]">61</span>
+</div>
+</div>
+<!-- Item 7 -->
+<div class="glass-card rounded-xl p-md grid grid-cols-12 items-center active:scale-[0.98] transition-transform">
+<div class="col-span-5 flex items-center gap-sm">
+<span class="font-label-caps text-on-surface-variant w-3 text-[10px]">7</span>
+<div class="w-8 h-8 rounded-full bg-surface-bright/20 flex-shrink-0 overflow-hidden">
+<img alt="Player" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_tP6vcd6GgQLwnjslOXpk2x4doXCboeTPzkTSqG7PmfqjkKWg6CbTB0X213_uhydCgqwRYhiGYtr1PeSfvazLpekHlexwvNfm_m1UR47yfdi7cerpIIHAqkhGtObWhiTk8ZqZE959lUtZc0G5BtBjOpQpITUGO40GzVwMqPwEul9-vxwU58Tf0lZrX5cgrVIk1u-Wf9hgXaxAeBOF9LvL_1Zn-wELG3ahoB68gHGI5l5Jzyb5GCQe7u1liJW4oBvtrHXIluYR8O0"/>
+</div>
+<span class="font-title-sm text-primary text-[13px] truncate">ZenMaster</span>
+</div>
+<div class="col-span-3 text-right">
+<span class="font-label-caps text-secondary text-[12px]">+1.5k $</span>
+</div>
+<div class="col-span-2 text-right leading-tight">
+<div class="font-label-caps text-primary text-[10px]">7%</div>
+<div class="font-label-caps text-on-surface-variant text-[8px]">49% W</div>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-bold text-primary text-[13px]">59</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Shell -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-md pb-lg pt-sm bg-surface-container/80 backdrop-blur-xl border-t border-white/10 rounded-t-xl">
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined mb-1" data-icon="home">home</span>
+<span class="font-label-caps text-[10px]">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined mb-1" data-icon="style">style</span>
+<span class="font-label-caps text-[10px]">Games</span>
+</button>
+<button class="flex flex-col items-center justify-center text-secondary font-bold active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined mb-1" data-icon="leaderboard" style="font-variation-settings: 'FILL' 1;">leaderboard</span>
+<span class="font-label-caps text-[10px]">Ranking</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined mb-1" data-icon="person">person</span>
+<span class="font-label-caps text-[10px]">Profile</span>
+</button>
+</nav>
+</body></html>

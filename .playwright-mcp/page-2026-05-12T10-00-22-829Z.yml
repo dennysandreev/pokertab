@@ -1,0 +1,14 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - link "Назад" [ref=e6] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e7]:
+        - heading "Рейтинг игроков" [level=1] [ref=e8]
+        - paragraph [ref=e9]: Статистика доступна после входа через Telegram.
+    - generic [ref=e10]:
+      - paragraph [ref=e11]: Режим просмотра в браузере
+      - paragraph [ref=e12]: Интерфейс можно посмотреть и проверить локально, но приватные действия работают только после запуска Mini App в Telegram.
+    - generic [ref=e14]:
+      - paragraph [ref=e15]: Нужен вход через Telegram
+      - paragraph [ref=e16]: После авторизации здесь появится общий рейтинг и список игроков, с которыми вы уже играли.

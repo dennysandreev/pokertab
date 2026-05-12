@@ -1,0 +1,37 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - link "Назад" [ref=e6] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e7]:
+        - heading "Создать стол" [level=1] [ref=e8]
+        - paragraph [ref=e9]: Подготовьте игру и сразу получите ссылку для приглашения.
+    - generic [ref=e10]:
+      - paragraph [ref=e11]: Режим просмотра в браузере
+      - paragraph [ref=e12]: Интерфейс можно посмотреть и проверить локально, но приватные действия работают только после запуска Mini App в Telegram.
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - text: Как назовём игру?
+        - textbox "Как назовём игру?" [ref=e16]:
+          - /placeholder: Например, Пятничный покер
+      - generic [ref=e17]:
+        - text: В какой валюте считаем?
+        - combobox "В какой валюте считаем?" [ref=e18]:
+          - option "Рубли" [selected]
+          - option "Доллары"
+          - option "Евро"
+      - generic [ref=e19]:
+        - text: Сколько стоит один ребай?
+        - textbox "Сколько стоит один ребай?" [ref=e20]:
+          - /placeholder: Например, 1000
+      - generic [ref=e21]:
+        - text: Стартовый стек
+        - textbox "Стартовый стек" [ref=e22]:
+          - /placeholder: Например, 10000
+      - generic [ref=e23]:
+        - text: Кто может добавлять ребаи
+        - combobox "Кто может добавлять ребаи" [ref=e24]:
+          - option "Игроки могут добавлять себе" [selected]
+          - option "Через админа"
+          - option "Только админ"
+      - button "Создать стол" [disabled]

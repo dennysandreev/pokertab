@@ -1,0 +1,35 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - heading "Игры" [level=1] [ref=e7]
+      - paragraph [ref=e8]: Привет, друг
+    - generic [ref=e9]:
+      - paragraph [ref=e10]: Режим просмотра в браузере
+      - paragraph [ref=e11]: Интерфейс можно посмотреть и проверить локально, но приватные действия работают только после запуска Mini App в Telegram.
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - paragraph [ref=e14]: Создать покерный стол
+        - paragraph [ref=e15]: Задайте ребай, пригласите друзей и спокойно ведите игру в одном месте.
+        - link "Создать стол" [ref=e16] [cursor=pointer]:
+          - /url: /rooms/new
+          - button "Создать стол" [ref=e17]
+      - generic [ref=e18]:
+        - paragraph [ref=e19]: Рейтинг игроков
+        - paragraph [ref=e20]: Сравните Poker Score, прибыль и стабильность по завершённым играм.
+        - link "Открыть рейтинг" [ref=e21] [cursor=pointer]:
+          - /url: /leaderboard
+          - button "Открыть рейтинг" [ref=e22]
+      - generic [ref=e23]:
+        - generic [ref=e24]:
+          - heading "Активные игры" [level=2] [ref=e25]
+          - paragraph [ref=e26]: Здесь будут столы, к которым вы уже присоединились.
+        - generic [ref=e27]:
+          - paragraph [ref=e28]: Игр пока нет
+          - paragraph [ref=e29]: Создайте первый стол или откройте приглашение от друга.
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - heading "Последние игры" [level=2] [ref=e32]
+          - paragraph [ref=e33]: Здесь появятся закрытые столы с вашим результатом.
+        - generic [ref=e34]:
+          - paragraph [ref=e35]: История пока пустая
+          - paragraph [ref=e36]: Как только игра завершится, итог появится здесь.

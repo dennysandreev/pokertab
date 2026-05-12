@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="ru"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0F0F0F;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error-container": "#93000a",
+                        "primary": "#ffffff",
+                        "on-tertiary-container": "#636565",
+                        "on-primary-container": "#636565",
+                        "primary-fixed": "#e2e2e2",
+                        "tertiary-container": "#e2e2e2",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "error": "#ffb4ab",
+                        "on-primary": "#2f3131",
+                        "secondary": "#4edea3",
+                        "background": "#141313",
+                        "primary-fixed-dim": "#c6c6c7",
+                        "on-error": "#690005",
+                        "inverse-surface": "#e5e2e1",
+                        "on-secondary-fixed-variant": "#005236",
+                        "surface-bright": "#3a3939",
+                        "on-surface-variant": "#c4c7c8",
+                        "on-secondary": "#003824",
+                        "surface-container-low": "#1c1b1b",
+                        "surface-variant": "#353434",
+                        "tertiary": "#ffffff",
+                        "inverse-primary": "#5d5f5f",
+                        "on-error-container": "#ffdad6",
+                        "on-background": "#e5e2e1",
+                        "on-surface": "#e5e2e1",
+                        "surface-container-highest": "#353434",
+                        "secondary-fixed-dim": "#4edea3",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "outline": "#8e9192",
+                        "surface-tint": "#c6c6c7",
+                        "inverse-on-surface": "#313030",
+                        "on-tertiary": "#2f3131",
+                        "tertiary-fixed": "#e2e2e2",
+                        "on-secondary-fixed": "#002113",
+                        "on-primary-fixed": "#1a1c1c",
+                        "surface-container-high": "#2a2a2a",
+                        "primary-container": "#e2e2e2",
+                        "on-primary-fixed-variant": "#454747",
+                        "surface-container-lowest": "#0e0e0e",
+                        "outline-variant": "#444748",
+                        "on-secondary-container": "#00311f",
+                        "surface-container": "#201f1f",
+                        "surface": "#141313",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "secondary-fixed": "#6ffbbe",
+                        "secondary-container": "#00a572",
+                        "surface-dim": "#141313"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "8px",
+                        "md": "16px",
+                        "sm": "12px",
+                        "lg": "24px",
+                        "base": "4px",
+                        "safe-area-inset": "16px",
+                        "xl": "32px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Hanken Grotesk"],
+                        "body-md": ["Inter"],
+                        "title-sm": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "headline-md": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col">
+<!-- Top Navigation Anchor -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-md h-16 bg-background border-b border-white/10">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-secondary text-[24px]">history</span>
+<h1 class="font-display-lg text-display-lg font-bold text-primary">Poker Table</h1>
+</div>
+<div class="flex items-center gap-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-white/10 flex items-center justify-center overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A minimalist avatar profile icon representing a user named Denis, designed in a sleek, vector-based modern style. The character features clean lines and a professional aesthetic, fitting into a dark-themed fintech dashboard with a muted color palette of deep blacks and grays, accented by emerald green tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWM_mY_6akp--9FRS0rix2-wSWwXvKNThY2OtejcwQmBdEIe4CSHAPL24YMOz2e9hUWxIsKeh-9XuqhWPmI5tJeQh9udNpHzUZDFI-HRk05Wc4tFtQZskrg6cV89QmQBCyN0HB5x7ewhvhK8MKnJKrQojbIr71oMf2-bB2V7v1ZaRQfhdMw_mDPsmsX6IZJqV7n8ZOI0WfTzYeswXj5WNuK3rB1aeFbczJu9ofu6SH9JYr4qSJXig8UtUreFMzz1eiuvkaR4F8_3k"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 mt-16 mb-24 px-md py-lg">
+<!-- Header Section -->
+<div class="mb-lg">
+<h2 class="font-headline-md text-headline-md text-primary mb-xs">История ребаев</h2>
+<p class="font-body-sm text-on-surface-variant">Покер у Дениса</p>
+</div>
+<!-- Scrollable Bento List -->
+<div class="space-y-sm no-scrollbar">
+<!-- Session Stats Bento -->
+<div class="grid grid-cols-2 gap-sm mb-lg">
+<div class="glass-card p-md rounded-xl">
+<p class="font-label-caps text-on-surface-variant uppercase mb-xs">Всего ребаев</p>
+<p class="font-display-lg text-display-lg text-primary">12</p>
+</div>
+<div class="glass-card p-md rounded-xl">
+<p class="font-label-caps text-on-surface-variant uppercase mb-xs">Средний чек</p>
+<p class="font-display-lg text-display-lg text-secondary">1,250 ₽</p>
+</div>
+</div>
+<!-- List of Transactions -->
+<div class="space-y-sm"><!-- Event 1: Ilya Rebuy with Cancel button -->
+<div class="glass-card p-md rounded-xl space-y-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">add_circle</span>
+</div>
+<div>
+<p class="font-title-sm text-primary">Ilya добавил ребай</p>
+<p class="font-body-sm text-on-surface-variant">22:41 • Стол #1</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-title-sm text-secondary">+1,000 ₽</p>
+</div>
+</div>
+<button class="w-full py-2 bg-error/10 text-error border border-error/20 rounded-lg font-label-caps uppercase active:scale-[0.98] transition-transform">
+        Отменить ребай
+    </button>
+</div>
+<!-- Event 2: Cancelled Status -->
+<div class="glass-card p-md rounded-xl flex items-center justify-between opacity-60 border-dashed border-error/30">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-error">cancel</span>
+</div>
+<div>
+<p class="font-title-sm text-primary">Ребай отменен админом</p>
+<p class="font-body-sm text-on-surface-variant">22:45</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-title-sm text-on-surface-variant line-through">1,000 ₽</p>
+</div>
+</div>
+<!-- Event 3: Denis Rebuy -->
+<div class="glass-card p-md rounded-xl flex items-center justify-between active:scale-[0.98] transition-transform">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">add_circle</span>
+</div>
+<div>
+<p class="font-title-sm text-primary">Denis добавил ребай</p>
+<p class="font-body-sm text-on-surface-variant">22:15 • Стол #1</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-title-sm text-secondary">+1,000 ₽</p>
+</div>
+</div>
+<!-- Event 4: Admin added for Alexey -->
+<div class="glass-card p-md rounded-xl flex items-center justify-between active:scale-[0.98] transition-transform">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-secondary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">admin_panel_settings</span>
+</div>
+<div>
+<p class="font-title-sm text-primary">Админ добавил ребай для Alexey</p>
+<p class="font-body-sm text-on-surface-variant">21:58 • Стол #1</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-title-sm text-secondary">+1,000 ₽</p>
+</div>
+</div>
+<!-- Event 5: Nikita Joined -->
+<div class="glass-card p-md rounded-xl flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">person_add</span>
+</div>
+<div>
+<p class="font-title-sm text-primary">Nikita присоединился</p>
+<p class="font-body-sm text-on-surface-variant">21:20</p>
+</div>
+</div>
+</div>
+<!-- Event 6: Game Started -->
+<div class="glass-card p-md rounded-xl flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">play_arrow</span>
+</div>
+<div>
+<p class="font-title-sm text-primary">Игра началась</p>
+<p class="font-body-sm text-on-surface-variant">21:05</p>
+</div>
+</div>
+</div></div>
+</div>
+<!-- Sticky Total Footer Section -->
+<div class="mt-lg pt-lg border-t border-white/10">
+<div class="flex justify-between items-end mb-md">
+<div>
+<p class="font-label-caps text-on-surface-variant uppercase mb-base">Итоговая сумма</p>
+<p class="font-display-lg text-display-lg text-primary">15,400 ₽</p>
+</div>
+<div class="text-right">
+<p class="font-body-sm text-secondary flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px]">trending_up</span>
+                        +12% к прошлой сессии
+                    </p>
+</div>
+</div>
+<button class="w-full h-12 bg-secondary text-on-secondary font-title-sm rounded-xl flex items-center justify-center gap-sm active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">add</span>
+                Добавить свой ребай
+            </button>
+</div>
+</main>
+<!-- Navigation Shell -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-md pb-lg pt-sm bg-surface-container/80 backdrop-blur-xl border-t border-white/10 rounded-t-xl">
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined text-[24px]">home</span>
+<span class="font-label-caps text-label-caps mt-1">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined text-[24px]">style</span>
+<span class="font-label-caps text-label-caps mt-1">Games</span>
+</div>
+<div class="flex flex-col items-center justify-center text-secondary font-bold active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">leaderboard</span>
+<span class="font-label-caps text-label-caps mt-1">Ranking</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined text-[24px]">person</span>
+<span class="font-label-caps text-label-caps mt-1">Profile</span>
+</div>
+</nav>
+<!-- FAB for quick action (Only visible if purpose aligns) -->
+<div class="fixed bottom-24 right-md z-40">
+<button class="w-14 h-14 bg-secondary text-on-secondary rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">payments</span>
+</button>
+</div>
+</body></html>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="ru"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error-container": "#93000a",
+                    "primary": "#ffffff",
+                    "on-tertiary-container": "#636565",
+                    "on-primary-container": "#636565",
+                    "primary-fixed": "#e2e2e2",
+                    "tertiary-container": "#e2e2e2",
+                    "on-tertiary-fixed": "#1a1c1c",
+                    "error": "#ffb4ab",
+                    "on-primary": "#2f3131",
+                    "secondary": "#4edea3",
+                    "background": "#141313",
+                    "primary-fixed-dim": "#c6c6c7",
+                    "on-error": "#690005",
+                    "inverse-surface": "#e5e2e1",
+                    "on-secondary-fixed-variant": "#005236",
+                    "surface-bright": "#3a3939",
+                    "on-surface-variant": "#c4c7c8",
+                    "on-secondary": "#003824",
+                    "surface-container-low": "#1c1b1b",
+                    "surface-variant": "#353434",
+                    "tertiary": "#ffffff",
+                    "inverse-primary": "#5d5f5f",
+                    "on-error-container": "#ffdad6",
+                    "on-background": "#e5e2e1",
+                    "on-surface": "#e5e2e1",
+                    "surface-container-highest": "#353434",
+                    "secondary-fixed-dim": "#4edea3",
+                    "tertiary-fixed-dim": "#c6c6c7",
+                    "outline": "#8e9192",
+                    "surface-tint": "#c6c6c7",
+                    "inverse-on-surface": "#313030",
+                    "on-tertiary": "#2f3131",
+                    "tertiary-fixed": "#e2e2e2",
+                    "on-secondary-fixed": "#002113",
+                    "on-primary-fixed": "#1a1c1c",
+                    "surface-container-high": "#2a2a2a",
+                    "primary-container": "#e2e2e2",
+                    "on-primary-fixed-variant": "#454747",
+                    "surface-container-lowest": "#0e0e0e",
+                    "outline-variant": "#444748",
+                    "on-secondary-container": "#00311f",
+                    "surface-container": "#201f1f",
+                    "surface": "#141313",
+                    "on-tertiary-fixed-variant": "#454747",
+                    "secondary-fixed": "#6ffbbe",
+                    "secondary-container": "#00a572",
+                    "surface-dim": "#141313"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xs": "8px",
+                    "md": "16px",
+                    "sm": "12px",
+                    "lg": "24px",
+                    "base": "4px",
+                    "safe-area-inset": "24px",
+                    "xl": "32px"
+            },
+            "fontFamily": {
+                    "display-lg": ["Hanken Grotesk"],
+                    "body-md": ["Inter"],
+                    "title-sm": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "headline-md": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0F0F0F;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass-card {
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="font-body-md text-on-surface">
+<!-- Top Navigation Bar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-md h-16 bg-background border-b border-white/10">
+<div class="flex items-center gap-xs">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center overflow-hidden border border-white/10">
+<img alt="Admin" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB8iYdkq_HJADMoEmm6pM-5WY3910JtF6HNN7HPvpdGgoELnMfM4hXGR_hQmgKxLif0L72vJEHQhunsI0s2W36ZRwtqq9qUPfAJgZSp6cDiZwvHmZh8rBbyvT91UDJHRkTEdwHup6znKEw9PcPP0iYE0AUEMIUyO0AFzyw9LjwG5mO_huiFG2qvb4qWKDTVXqrpIL-O7_YTZxct290_YNCKr9J_DXiFlHpgalCOgzC7w8_3S_sT3QI_UuZ6jGd8yO1bjULGJRx_PPo"/>
+</div>
+<span class="font-display-lg text-display-lg font-bold text-primary">Poker Table</span>
+</div>
+</header>
+<main class="pt-20 pb-32 px-md space-y-lg">
+<!-- Header Card: Poker at Denis -->
+<section class="glass-card rounded-2xl p-lg relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-secondary/5 blur-3xl -mr-16 -mt-16"></div>
+<div class="relative z-10 flex flex-col gap-md">
+<div class="flex justify-between items-start">
+<div>
+<h1 class="font-headline-md text-headline-md text-primary">Poker at Denis</h1>
+<p class="text-secondary font-label-caps text-label-caps uppercase tracking-wider">Режим администратора</p>
+</div>
+<div class="px-xs py-base bg-secondary/10 rounded-full flex items-center gap-xs">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="text-secondary font-label-caps text-label-caps">LIVE</span>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-xs pt-base border-t border-white/5">
+<div class="flex flex-col">
+<span class="text-on-surface-variant font-label-caps text-[10px] uppercase">Ребай</span>
+<span class="text-primary font-title-sm">1 000 ₽</span>
+</div>
+<div class="flex flex-col">
+<span class="text-on-surface-variant font-label-caps text-[10px] uppercase">Общий пот</span>
+<span class="text-primary font-title-sm">24 000 ₽</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-on-surface-variant font-label-caps text-[10px] uppercase">Игроков</span>
+<span class="text-primary font-title-sm">7</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Player Management List -->
+<section class="space-y-sm">
+<div class="flex items-center justify-between px-base">
+<h2 class="font-title-sm text-title-sm text-primary">Управление игроками</h2>
+</div>
+<div class="space-y-sm">
+<!-- Denis -->
+<div class="glass-card rounded-xl p-md flex items-center justify-between border-l-4 border-l-secondary">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface-variant flex items-center justify-center border border-white/10 overflow-hidden">
+<img alt="Denis" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsDVErN6ISXaZ7mtph21sKGjdo-Fykd-0Z56pp-C6cha65ZiuVcKch6_ayVq_KzZJlSHtfyNjxV2bpgSH3KcvdL5tH1WTjieAmDBzPUTU4uKsGaRxchXU2fHZvaWBM7s53U42IdyEYzbRgNGyDGD7M9qaWgdqNBfRdI0LpibPWAa2LZQ9n8Ia4H-rMAMcHhXG3JFQ9q5UccjahkZZ64056I-vIWR3gM2n1dmS9d519p64zoCGSvFT0U1dHVRRGgRkA33lHMw2Y8Pw"/>
+</div>
+<div>
+<p class="font-title-sm text-title-sm text-primary">Denis (Вы)</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">3 ребая · 3 000 ₽</p>
+</div>
+</div>
+<div class="flex items-center gap-xs">
+<button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant border border-white/5 active:scale-95">
+<span class="material-symbols-outlined text-base">remove</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary border border-secondary/20 active:scale-95">
+<span class="material-symbols-outlined text-base">add</span>
+</button>
+</div>
+</div>
+<!-- Alexey -->
+<div class="glass-card rounded-xl p-md flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface-variant flex items-center justify-center border border-white/10 overflow-hidden">
+<img alt="Alexey" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCP3soHmk6Sa-A5gWRzhI83UpXiQV-ZzBZYwR5g8D_37ZPL812eF5FV98YAOWjphXofTJVGUfJ9gBDJ02UVXcWPjaNQbrBt1OxVUYDFKjuW8g2yjWnrCBffb_UUatp1Jymx_vo4opqSro2wYOKIN18X7aqoxR9BwT_1wD9uEMMyEjg83cHn38mwGLgNwctLVFtaXXd7VNzh3y9sPxFEPIOGPKfNeYJsPeWFqoINd5-TyZWVtw12OJMAJ9fLgwqw3cg25SSLjkm_5IA"/>
+</div>
+<div>
+<p class="font-title-sm text-title-sm text-primary">Alexey</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">2 ребая · 2 000 ₽</p>
+</div>
+</div>
+<div class="flex items-center gap-xs">
+<button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant border border-white/5 active:scale-95">
+<span class="material-symbols-outlined text-base">remove</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary border border-secondary/20 active:scale-95">
+<span class="material-symbols-outlined text-base">add</span>
+</button>
+</div>
+</div>
+<!-- Ilya -->
+<div class="glass-card rounded-xl p-md flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface-variant flex items-center justify-center border border-white/10 overflow-hidden">
+<img alt="Ilya" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBq--G5ifvqdDUecWNctWFJiqnryNr65u--o3G3bh76Uzyxx9EtFr7dnGoDhIyqlUxBt6DUdzktg5xH1TnXS_7kjiK1kBR0FyfH9XCGW6tYH3wndQjuY3JBAefPq8xwg8iCpCbkHJbpLPNkU7jhgtVGLsB0l6MPwe_q_CBxR_Y_2tWTQluRvzAXXul-ofYHd1ZDyxMZcKzdfQweIZUdsWm7f91MdY09QdDQ8Q0Dj5f4gnvUTbTMA-nU1v0XB990FsoVexQnmGBU5-A"/>
+</div>
+<div>
+<p class="font-title-sm text-title-sm text-primary">Ilya</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">4 ребая · 4 000 ₽</p>
+</div>
+</div>
+<div class="flex items-center gap-xs">
+<button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant border border-white/5 active:scale-95">
+<span class="material-symbols-outlined text-base">remove</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary border border-secondary/20 active:scale-95">
+<span class="material-symbols-outlined text-base">add</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Admin Actions -->
+<section class="space-y-sm">
+<div class="grid grid-cols-2 gap-sm">
+<button class="glass-card rounded-xl py-md flex items-center justify-center gap-xs active:scale-95 transition-transform text-primary border border-white/5">
+<span class="material-symbols-outlined text-[20px]" data-icon="person_add">person_add</span>
+<span class="font-label-caps text-label-caps">Добавить игрока</span>
+</button>
+<button class="glass-card rounded-xl py-md flex items-center justify-center gap-xs active:scale-95 transition-transform text-primary border border-white/5">
+<span class="material-symbols-outlined text-[20px]" data-icon="history">history</span>
+<span class="font-label-caps text-label-caps">История</span>
+</button>
+</div>
+<button class="w-full bg-secondary hover:brightness-110 text-[#002113] font-title-sm text-title-sm py-md rounded-xl font-bold transition-all active:scale-[0.98] shadow-lg shadow-secondary/10">
+                Перейти к расчету
+            </button>
+</section>
+<!-- Danger Zone -->
+<section class="pt-md">
+<button class="w-full text-on-surface-variant/60 font-label-caps text-label-caps py-md rounded-xl border border-white/5 hover:bg-white/5 transition-colors">
+                Закрыть игру
+            </button>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-md pb-safe-area-inset pt-sm border-t border-white/10 bg-surface-container/80 backdrop-blur-xl">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-caps text-label-caps mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary font-bold active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="style" style="font-variation-settings: 'FILL' 1;">style</span>
+<span class="font-label-caps text-label-caps mt-1">Games</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span>
+<span class="font-label-caps text-label-caps mt-1">Ranking</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-caps text-label-caps mt-1">Profile</span>
+</a>
+</nav>
+</body></html>

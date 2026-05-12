@@ -1,0 +1,20 @@
+{
+  "name": "@pokertable/bot",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pokertable/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "vitest": "^3.1.2"
+  }
+}
