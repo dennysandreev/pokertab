@@ -1,0 +1,75 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pokertab
+      POSTGRES_USER: pokertab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pokertab -d pokertab"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://pokertab:${POSTGRES_PASSWORD}@db:5432/pokertab?schema=public
+      APP_SESSION_SECRET: ${APP_SESSION_SECRET}
+      APP_SESSION_TTL_SECONDS: ${APP_SESSION_TTL_SECONDS:-604800}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME}
+      TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-600}
+      WEB_APP_URL: ${WEB_APP_URL}
+    expose:
+      - "3000"
+
+  bot:
+    build:
+      context: ..
+      dockerfile: apps/bot/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      BOT_PORT: 3100
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      WEB_APP_URL: ${WEB_APP_URL}
+    expose:
+      - "3100"
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${WEB_APP_URL}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    expose:
+      - "80"
+    networks:
+      - default
+      - public_proxy
+
+volumes:
+  postgres_data:
+
+networks:
+  public_proxy:
+    external: true
+    name: splitopus-v2_default

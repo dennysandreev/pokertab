@@ -1,0 +1,13 @@
+.git
+.DS_Store
+.env
+.playwright-mcp
+node_modules
+dist
+coverage
+.turbo
+.vite
+apps/*/dist
+apps/*/node_modules
+packages/*/dist
+packages/*/node_modules
