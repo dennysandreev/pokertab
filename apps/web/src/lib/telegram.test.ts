@@ -3,6 +3,7 @@ import {
   canUseBrowserBack,
   getTelegramBackFallbackPath,
   hideTelegramBackButton,
+  initializeTelegramWebApp,
   offTelegramBackButtonClick,
   onTelegramBackButtonClick,
   readTelegramLaunchData,
@@ -55,10 +56,28 @@ describe("readTelegramLaunchData", () => {
 });
 
 describe("Telegram Back Button helpers", () => {
+  it("initializes Telegram WebApp when helpers are available", () => {
+    const ready = vi.fn();
+    const expand = vi.fn();
+
+    initializeTelegramWebApp({
+      Telegram: {
+        WebApp: {
+          ready,
+          expand
+        }
+      }
+    });
+
+    expect(ready).toHaveBeenCalledOnce();
+    expect(expand).toHaveBeenCalledOnce();
+  });
+
   it("does not throw outside Telegram", () => {
     const callback = vi.fn();
 
     expect(() => {
+      initializeTelegramWebApp({});
       showTelegramBackButton({});
       hideTelegramBackButton({});
       onTelegramBackButtonClick(callback, {});

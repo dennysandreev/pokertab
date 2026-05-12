@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { postTelegramAuth } from "@/lib/api";
 import { createInitialSessionState, type SessionState } from "@/lib/bootstrap";
-import { readTelegramLaunchData } from "@/lib/telegram";
+import { initializeTelegramWebApp, readTelegramLaunchData } from "@/lib/telegram";
 
 type SessionContextValue = {
   state: SessionState;
@@ -25,6 +25,10 @@ export function SessionProvider({
   const [state, setState] = useState<SessionState>(() =>
     createInitialSessionState(readTelegramLaunchData())
   );
+
+  useEffect(() => {
+    initializeTelegramWebApp();
+  }, []);
 
   const bootstrap = useCallback(async () => {
     if (!state.initData) {

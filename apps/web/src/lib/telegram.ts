@@ -5,6 +5,8 @@ type TelegramWebApp = {
   initDataUnsafe?: {
     start_param?: string;
   };
+  ready?: () => void;
+  expand?: () => void;
   BackButton?: {
     show: () => void;
     hide: () => void;
@@ -47,6 +49,15 @@ export function readTelegramLaunchData(
     startParam,
     inviteCode: getInviteCodeFromStartParam(startParam)
   };
+}
+
+export function initializeTelegramWebApp(
+  source: TelegramWindow | undefined = globalThis as TelegramWindow | undefined
+): void {
+  const webApp = source?.Telegram?.WebApp;
+
+  webApp?.ready?.();
+  webApp?.expand?.();
 }
 
 export function showTelegramBackButton(
