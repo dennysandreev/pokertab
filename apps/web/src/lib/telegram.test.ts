@@ -59,18 +59,58 @@ describe("Telegram Back Button helpers", () => {
   it("initializes Telegram WebApp when helpers are available", () => {
     const ready = vi.fn();
     const expand = vi.fn();
+    const requestFullscreen = vi.fn();
+    const disableVerticalSwipes = vi.fn();
 
     initializeTelegramWebApp({
       Telegram: {
         WebApp: {
           ready,
-          expand
+          expand,
+          requestFullscreen,
+          disableVerticalSwipes
         }
       }
     });
 
     expect(ready).toHaveBeenCalledOnce();
     expect(expand).toHaveBeenCalledOnce();
+    expect(requestFullscreen).toHaveBeenCalledOnce();
+    expect(disableVerticalSwipes).toHaveBeenCalledOnce();
+  });
+
+  it("ignores fullscreen errors from partial Telegram SDKs", () => {
+    expect(() =>
+      initializeTelegramWebApp({
+        Telegram: {
+          WebApp: {
+            requestFullscreen: () => {
+              throw new Error("unsupported");
+            },
+            disableVerticalSwipes: () => {
+              throw new Error("unsupported");
+            }
+          }
+        }
+      })
+    ).not.toThrow();
+  });
+
+  it("ignores rejected fullscreen promises from Telegram SDK", async () => {
+    const requestFullscreen = vi.fn().mockRejectedValue(new Error("unsupported"));
+
+    expect(() =>
+      initializeTelegramWebApp({
+        Telegram: {
+          WebApp: {
+            requestFullscreen
+          }
+        }
+      })
+    ).not.toThrow();
+
+    await Promise.resolve();
+    expect(requestFullscreen).toHaveBeenCalledOnce();
   });
 
   it("does not throw outside Telegram", () => {

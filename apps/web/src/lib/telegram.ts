@@ -7,12 +7,18 @@ type TelegramWebApp = {
   };
   ready?: () => void;
   expand?: () => void;
+  requestFullscreen?: () => void | Promise<void>;
+  disableVerticalSwipes?: () => void;
   BackButton?: {
     show: () => void;
     hide: () => void;
     onClick: (callback: () => void) => void;
     offClick: (callback: () => void) => void;
   };
+};
+
+type PromiseLikeResult = {
+  catch?: (onRejected: (error: unknown) => void) => unknown;
 };
 
 type TelegramWindow = {
@@ -56,8 +62,10 @@ export function initializeTelegramWebApp(
 ): void {
   const webApp = source?.Telegram?.WebApp;
 
-  webApp?.ready?.();
-  webApp?.expand?.();
+  invokeOptionalMethod(() => webApp?.ready?.());
+  invokeOptionalMethod(() => webApp?.expand?.());
+  invokeOptionalMethod(() => webApp?.disableVerticalSwipes?.());
+  invokeOptionalMethod(() => webApp?.requestFullscreen?.());
 }
 
 export function showTelegramBackButton(
@@ -114,4 +122,15 @@ function normalizeValue(value: string | null | undefined): string | null {
   const trimmed = value.trim();
 
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function invokeOptionalMethod(callback: () => void | Promise<void> | undefined): void {
+  try {
+    const result = callback() as PromiseLikeResult | void;
+    result?.catch?.(() => {
+      // Ignore async Telegram SDK failures in browser previews.
+    });
+  } catch {
+    // Ignore unsupported SDK implementations in browser previews.
+  }
 }

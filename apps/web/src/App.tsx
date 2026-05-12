@@ -139,25 +139,32 @@ type SettlementPreviewState =
       draftKey: string | null;
     };
 
-const cardClassName = "rounded-lg border border-border bg-card p-4";
-const mutedCardClassName = "rounded-lg border border-border bg-background/50 p-4";
+const cardClassName = "glass-card rounded-2xl bg-card p-4 shadow-panel";
+const mutedCardClassName = "glass-card rounded-2xl bg-white/[0.02] p-4";
 const inputClassName =
-  "mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-accent";
-const selectClassName = inputClassName;
+  "mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-surfaceHigher px-4 text-sm text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 const labelClassName = "text-sm font-medium text-foreground";
+const secondaryButtonClassName =
+  "border border-white/10 bg-surfaceHigh text-foreground shadow-none hover:bg-surfaceHigher";
+const tertiaryButtonClassName =
+  "border border-white/10 bg-transparent text-foreground shadow-none hover:bg-white/[0.03]";
 
 export default function App(): JSX.Element {
   return (
-    <main
-      className="min-h-screen bg-background px-4 text-foreground"
-      style={{
-        paddingTop: "max(1.25rem, env(safe-area-inset-top))",
-        paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))"
-      }}
-    >
-      <div className="mx-auto flex w-full max-w-md flex-col gap-4 pb-8">
-        <LaunchInviteRedirect />
-        <TelegramBackButtonSync />
+    <div className="relative min-h-[100dvh] overflow-x-hidden bg-surface text-foreground">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[28rem] bg-[radial-gradient(circle_at_top,rgba(78,222,163,0.11),transparent_56%)]" />
+      <div className="pointer-events-none fixed inset-y-0 right-[-7rem] z-0 w-[16rem] bg-[radial-gradient(circle,rgba(78,222,163,0.06),transparent_62%)] blur-3xl" />
+      <LaunchInviteRedirect />
+      <TelegramBackButtonSync />
+      <AppChrome />
+      <main
+        className="relative z-10 flex w-full flex-col gap-5 px-4"
+        style={{
+          paddingTop: "calc(env(safe-area-inset-top) + 5.75rem)",
+          paddingBottom: "calc(env(safe-area-inset-bottom) + 6.5rem)",
+          minHeight: "100dvh"
+        }}
+      >
         <Routes>
           <Route path={getHomeRoute()} element={<HomeScreen />} />
           <Route path={getLeaderboardRoute()} element={<LeaderboardScreen />} />
@@ -167,8 +174,9 @@ export default function App(): JSX.Element {
           <Route path="/join/:inviteCode" element={<JoinRoomScreen />} />
           <Route path="*" element={<Navigate to={getHomeRoute()} replace />} />
         </Routes>
-      </div>
-    </main>
+      </main>
+      <BottomNav />
+    </div>
   );
 }
 
@@ -221,6 +229,125 @@ function TelegramBackButtonSync(): JSX.Element | null {
   return null;
 }
 
+function AppChrome(): JSX.Element {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { state } = useSession();
+  const isHome = location.pathname === getHomeRoute();
+  const canGoBack = !isHome;
+  const usesCompactHeader =
+    location.pathname === getCreateRoomRoute() || location.pathname.startsWith("/rooms/");
+  const userName = state.session?.user.firstName ?? state.session?.user.username ?? "игрок";
+  const avatarUrl = state.session?.user.avatarUrl;
+
+  function handleBack(): void {
+    if (canUseBrowserBack()) {
+      void navigate(-1);
+      return;
+    }
+
+    void navigate(getTelegramBackFallbackPath(location.pathname), { replace: true });
+  }
+
+  return (
+    <header
+      className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[#141313]/88 backdrop-blur-xl"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
+      <div
+        className={cn(
+          "flex w-full items-center gap-3 px-4",
+          usesCompactHeader ? "h-16" : "h-20"
+        )}
+      >
+        {usesCompactHeader && canGoBack ? (
+          <button
+            aria-label="Назад"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground transition hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onClick={handleBack}
+            type="button"
+          >
+            <MaterialIcon icon="arrow_back_ios_new" />
+          </button>
+        ) : avatarUrl ? (
+          <div className="h-12 w-12 overflow-hidden rounded-full border border-white/10 bg-surfaceHigher shadow-panel">
+            <img alt="" className="h-full w-full object-cover" src={avatarUrl} />
+          </div>
+        ) : (
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-surfaceHigher text-accent shadow-panel">
+            <MaterialIcon icon="playing_cards" />
+          </div>
+        )}
+
+        {usesCompactHeader ? (
+          <div className="min-w-0">
+            <p className="truncate text-[1.1rem] font-semibold text-white">
+              {getChromeSubtitle(location.pathname)}
+            </p>
+          </div>
+        ) : (
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-[2rem] font-bold leading-none text-white">
+              Poker Table
+            </h1>
+            <p className="mt-1 truncate text-sm text-muted">
+              {isHome ? `${getGreeting()}, ${userName}` : getChromeSubtitle(location.pathname)}
+            </p>
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function BottomNav(): JSX.Element {
+  const location = useLocation();
+  const { state } = useSession();
+  const profileRoute = state.session?.user.id ? getPlayerRoute(state.session.user.id) : getHomeRoute();
+  const gameRoute = getGamesRoute(location.pathname);
+  const items = [
+    { label: "Главная", icon: "home", href: getHomeRoute(), active: location.pathname === getHomeRoute() },
+    { label: "Игры", icon: "style", href: gameRoute, active: isGamesRoute(location.pathname) },
+    {
+      label: "Рейтинг",
+      icon: "leaderboard",
+      href: getLeaderboardRoute(),
+      active:
+        location.pathname === getLeaderboardRoute() ||
+        (location.pathname.startsWith("/players/") && !isOwnProfilePath(location.pathname, state.session?.user.id ?? null))
+    },
+    {
+      label: "Профиль",
+      icon: "person",
+      href: profileRoute,
+      active: isOwnProfilePath(location.pathname, state.session?.user.id ?? null)
+    }
+  ];
+
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#1d1c1c]/88 backdrop-blur-xl"
+      style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+    >
+      <div className="grid w-full grid-cols-4 gap-2 px-4 pb-1 pt-3">
+        {items.map((item) => (
+          <Link
+            key={item.label}
+            className={cn(
+              "flex min-h-12 flex-col items-center justify-center rounded-xl px-2 py-2 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+              item.active ? "text-accent" : "text-muted hover:bg-white/[0.03] hover:text-foreground"
+            )}
+            to={item.href}
+          >
+            <MaterialIcon filled={item.active} icon={item.icon} />
+            <span className="mt-1">{item.label}</span>
+          </Link>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
 function HomeScreen(): JSX.Element {
   const { bootstrap, state } = useSession();
   const [roomsState, setRoomsState] = useState<LoadState<RoomsListResponseDto>>({
@@ -228,8 +355,6 @@ function HomeScreen(): JSX.Element {
     data: null,
     errorMessage: null
   });
-  const userName = state.session?.user.firstName ?? state.session?.user.username ?? "друг";
-
   useEffect(() => {
     if (!state.accessToken) {
       setRoomsState({
@@ -278,46 +403,65 @@ function HomeScreen(): JSX.Element {
 
   const activeRooms = roomsState.data?.active ?? [];
   const recentRooms = roomsState.data?.recent ?? [];
+  const inviteRoute = state.inviteCode ? getJoinRoomRoute(state.inviteCode) : null;
 
   return (
-    <ScreenLayout
-      title="Игры"
-      subtitle={`Привет, ${userName}`}
-      banner={getSessionBanner(state.status, state.errorMessage)}
-    >
-      <section className={cardClassName}>
-        <p className="text-base font-semibold">Создать покерный стол</p>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          Задайте ребай, пригласите друзей и спокойно ведите игру в одном месте.
-        </p>
-        <Link className="mt-4 block" to={getCreateRoomRoute()}>
-          <Button className="w-full">Создать стол</Button>
-        </Link>
+    <ScreenLayout banner={getSessionBanner(state.status, state.errorMessage)}>
+      <section className={cn(cardClassName, "relative overflow-hidden px-5 py-6")}>
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(78,222,163,0.09),transparent_45%)]" />
+        <div className="absolute right-[-2.5rem] top-[-2.5rem] h-32 w-32 rounded-full bg-accent/10 blur-3xl" />
+        <div className="relative space-y-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent/90">
+              Ваш стол на вечер
+            </p>
+            <h2 className="mt-3 font-display text-[2rem] font-semibold leading-tight text-white">
+              Создайте игру за минуту
+            </h2>
+            <p className="mt-3 max-w-[22rem] text-sm leading-6 text-muted">
+              Задайте сумму ребая, позовите друзей и следите за результатом без лишних сообщений в чате.
+            </p>
+          </div>
+          <div className="space-y-3">
+            <Link className="block" to={getCreateRoomRoute()}>
+              <Button className="w-full">
+                <MaterialIcon icon="add_circle" />
+                Создать стол
+              </Button>
+            </Link>
+            {inviteRoute ? (
+              <Link className="block" to={inviteRoute}>
+                <Button className={cn("w-full", tertiaryButtonClassName)}>
+                  <MaterialIcon icon="group_add" />
+                  Перейти к приглашению
+                </Button>
+              </Link>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-muted">
+                Как только придёт приглашение в Telegram, мы покажем вход в игру прямо здесь.
+              </div>
+            )}
+          </div>
+        </div>
       </section>
-
-      <section className={cardClassName}>
-        <p className="text-base font-semibold">Рейтинг игроков</p>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          Сравните Poker Score, прибыль и стабильность по завершённым играм.
-        </p>
-        <Link className="mt-4 block" to={getLeaderboardRoute()}>
-          <Button className="w-full border border-border bg-background/60 text-foreground">
-            Открыть рейтинг
-          </Button>
-        </Link>
-      </section>
-
-      {state.status === "error" ? (
-        <Button className="w-full" onClick={() => void bootstrap()}>
-          Попробовать снова
-        </Button>
-      ) : null}
 
       <section className="space-y-3">
         <SectionHeading
+          action={
+            <Link className="text-sm font-semibold text-accent" to={getCreateRoomRoute()}>
+              Новый стол
+            </Link>
+          }
           title="Активные игры"
-          description="Здесь будут столы, к которым вы уже присоединились."
+          description="Столы, к которым вы уже подключены."
         />
+
+        {state.status === "error" ? (
+          <Button className="w-full" onClick={() => void bootstrap()}>
+            Попробовать снова
+          </Button>
+        ) : null}
+
         {roomsState.status === "loading" ? (
           <InfoCard
             title="Загружаем игры"
@@ -335,19 +479,31 @@ function HomeScreen(): JSX.Element {
         ) : null}
         {activeRooms.map((room) => (
           <Link key={room.id} to={getRoomRoute(room.id)}>
-            <article className={mutedCardClassName}>
+            <article className={cn(cardClassName, "border-l-4 border-l-accent px-5 py-5")}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-base font-semibold">{room.title}</p>
-                  <p className="mt-1 text-sm text-muted">{getRoomStatusText(room.status)}</p>
+                  <p className="text-[1.65rem] font-semibold leading-tight text-white">{room.title}</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-accent" />
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
+                      {getRoomStatusText(room.status)}
+                    </span>
+                  </div>
                 </div>
-                <span className="rounded-full bg-background px-3 py-1 text-xs text-muted">
-                  {room.playersCount} игроков
+                <span className="text-sm font-semibold text-foreground/85">
+                  {room.playersCount} {getPlayersLabel(room.playersCount)}
                 </span>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-muted">
+              <div className="mt-4 grid grid-cols-2 gap-3 border-y border-white/5 py-4">
                 <Metric label="Ребай" value={formatMinorMoney(room.rebuyAmountMinor, room.currency)} />
-                <Metric label="Твои закупы" value={formatMinorMoney(room.myBuyinsMinor, room.currency)} />
+                <Metric
+                  label="Ваши закупы"
+                  value={formatMinorMoney(room.myBuyinsMinor, room.currency)}
+                  valueClassName="text-accent"
+                />
+              </div>
+              <div className="mt-4">
+                <Button className={cn("w-full", secondaryButtonClassName)}>Открыть</Button>
               </div>
             </article>
           </Link>
@@ -356,8 +512,9 @@ function HomeScreen(): JSX.Element {
 
       <section className="space-y-3">
         <SectionHeading
+          action={<span className="text-sm font-semibold text-accent">Все</span>}
           title="Последние игры"
-          description="Здесь появятся закрытые столы с вашим результатом."
+          description="Здесь появятся закрытые столы с вашим итогом."
         />
         {recentRooms.length === 0 ? (
           <InfoCard
@@ -366,17 +523,23 @@ function HomeScreen(): JSX.Element {
           />
         ) : null}
         {recentRooms.map((room) => (
-          <article key={room.id} className={mutedCardClassName}>
-            <p className="text-base font-semibold">{room.title}</p>
-            <p className="mt-1 text-sm text-muted">
-              {room.closedAt ? `Завершена ${formatDate(room.closedAt)}` : "Игра завершена"}
-            </p>
-            <p className="mt-3 text-sm">
-              Результат:{" "}
-              <span className={getResultColorClass(room.myNetResultMinor ?? "0")}>
+          <article key={room.id} className={cn(mutedCardClassName, "px-4 py-4")}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/5 bg-surfaceHigher text-muted">
+                  <MaterialIcon icon="history" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xl font-semibold text-white">{room.title}</p>
+                  <p className="mt-1 text-sm text-muted">
+                    {room.closedAt ? `Закрыта ${formatDate(room.closedAt)}` : "Игра завершена"}
+                  </p>
+                </div>
+              </div>
+              <p className={cn("text-xl font-semibold", getResultColorClass(room.myNetResultMinor ?? "0"))}>
                 {formatMinorMoney(room.myNetResultMinor ?? "0", room.currency)}
-              </span>
-            </p>
+              </p>
+            </div>
           </article>
         ))}
       </section>
@@ -446,13 +609,12 @@ function LeaderboardScreen(): JSX.Element {
 
   const items = leaderboardState.data?.items ?? [];
   const emptyCopy = getLeaderboardEmptyCopy(scope);
+  const topPlayers = items.slice(0, 3);
+  const remainingPlayers = items.slice(3);
 
   if (!state.accessToken) {
     return (
       <ScreenLayout
-        title="Рейтинг игроков"
-        subtitle="Статистика доступна после входа через Telegram."
-        backTo={getHomeRoute()}
         banner={getSessionBanner(state.status, state.errorMessage)}
       >
         <InfoCard
@@ -464,11 +626,16 @@ function LeaderboardScreen(): JSX.Element {
   }
 
   return (
-    <ScreenLayout
-      title="Рейтинг игроков"
-      subtitle="Сравнивайте форму игроков по завершённым играм."
-      backTo={getHomeRoute()}
-    >
+    <ScreenLayout>
+      <section className="space-y-2 pt-1">
+        <h2 className="font-display text-[2.25rem] font-semibold leading-tight text-white">
+          Лидерборд
+        </h2>
+        <p className="text-base leading-7 text-muted">
+          Сравнивайте форму игроков по завершённым столам.
+        </p>
+      </section>
+
       <section className={`${cardClassName} space-y-4`}>
         <div className="grid grid-cols-2 gap-2">
           {LEADERBOARD_SCOPE_OPTIONS.map((option) => (
@@ -482,6 +649,7 @@ function LeaderboardScreen(): JSX.Element {
             </button>
           ))}
         </div>
+        <p className="text-sm italic leading-6 text-muted">{getScopeDescription(scope)}</p>
         <div className="flex flex-wrap gap-2">
           {LEADERBOARD_PERIOD_OPTIONS.map((option) => (
             <button
@@ -511,42 +679,83 @@ function LeaderboardScreen(): JSX.Element {
         <InfoCard title={emptyCopy.title} description={emptyCopy.description} />
       ) : null}
 
-      {items.length > 0 ? (
-        <section className="space-y-3">
-          {items.map((player) => (
-            <Link key={player.userId} to={getPlayerRoute(player.userId)}>
-              <article className={mutedCardClassName}>
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-card text-sm font-semibold text-foreground">
+      {topPlayers.length > 0 ? (
+        <section className="grid grid-cols-3 gap-3">
+          {topPlayers.map((player, index) => {
+            const highlight = index === 0;
+
+            return (
+              <Link key={player.userId} to={getPlayerRoute(player.userId)}>
+                <article
+                  className={cn(
+                    cardClassName,
+                    "flex h-full flex-col items-center justify-end px-3 py-4 text-center",
+                    highlight && "border-accent/40 bg-[linear-gradient(180deg,rgba(78,222,163,0.12),rgba(26,26,26,0.85))]"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "flex h-12 w-12 items-center justify-center rounded-full border bg-surfaceHigher text-sm font-semibold text-white",
+                      highlight ? "border-accent text-accent" : "border-white/10"
+                    )}
+                  >
                     {player.rank}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-base font-semibold">{player.displayName}</p>
-                        <p className="mt-1 text-sm text-muted">
-                          {player.gamesCount} {getGamesLabel(player.gamesCount)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs uppercase tracking-wide text-muted">Poker Score</p>
-                        <p className="mt-1 text-lg font-semibold">{player.pokerScore}</p>
-                      </div>
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                      <Metric
-                        label="Прибыль"
-                        value={formatSignedMinorStat(player.totalProfitMinor)}
-                        valueClassName={getToneClass(player.totalProfitMinor)}
-                      />
-                      <Metric label="ROI" value={formatPercentFromBps(player.roiBps)} />
-                      <Metric label="Победы" value={formatPercentFromBps(player.winRateBps)} />
-                      <Metric
-                        label="Стабильность"
-                        value={formatPercentFromBps(player.stabilityScoreBps)}
-                      />
-                    </div>
+                  <p className={cn("mt-3 text-sm font-semibold", highlight ? "text-accent" : "text-white")}>
+                    {player.displayName}
+                  </p>
+                  <p className={cn("mt-2 text-[1.1rem] font-semibold", getToneClass(player.totalProfitMinor))}>
+                    {formatSignedMinorStat(player.totalProfitMinor)}
+                  </p>
+                  <div className="mt-3 space-y-1 text-xs text-muted">
+                    <p>ROI {formatPercentFromBps(player.roiBps)}</p>
+                    <p>
+                      <span className="text-base font-semibold text-white">{player.pokerScore}</span> PS
+                    </p>
                   </div>
+                </article>
+              </Link>
+            );
+          })}
+        </section>
+      ) : null}
+
+      {remainingPlayers.length > 0 ? (
+        <section className="space-y-3">
+          <div className="grid grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,0.8fr)] gap-3 px-2 text-[11px] uppercase tracking-[0.18em] text-muted">
+            <span>Игрок</span>
+            <span className="text-right">Профит</span>
+            <span className="text-right">Score</span>
+          </div>
+          {remainingPlayers.map((player) => (
+            <Link key={player.userId} to={getPlayerRoute(player.userId)}>
+              <article
+                className={cn(
+                  mutedCardClassName,
+                  "grid grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,0.8fr)] items-center gap-3 px-4 py-4",
+                  player.userId === state.session?.user.id &&
+                    "border-accent/40 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(26,26,26,0.8))]"
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-surfaceHigher text-sm font-semibold text-white">
+                    {player.rank}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-lg font-semibold text-white">{player.displayName}</p>
+                    <p className="text-xs text-muted">
+                      {formatPercentFromBps(player.roiBps)} ROI • {formatPercentFromBps(player.winRateBps)} побед
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className={cn("text-lg font-semibold", getToneClass(player.totalProfitMinor))}>
+                    {formatSignedMinorStat(player.totalProfitMinor)}
+                  </p>
+                  <p className="text-xs text-muted">{player.gamesCount} {getGamesLabel(player.gamesCount)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-semibold text-white">{player.pokerScore}</p>
                 </div>
               </article>
             </Link>
@@ -693,41 +902,54 @@ function PlayerProfileScreen(): JSX.Element {
   const { recentGames, stats, user } = profile;
 
   return (
-    <ScreenLayout
-      title={user.displayName}
-      subtitle={user.username ? `@${user.username}` : "Показатели по завершённым играм"}
-      backTo={getLeaderboardRoute()}
-    >
-      <section className={`${cardClassName} space-y-4`}>
-        <div className="grid grid-cols-2 gap-3">
-          <Metric label="Poker Score" value={String(stats.pokerScore)} />
-          <Metric label="Игр" value={String(stats.gamesCount)} />
-          <Metric
-            label="Общая прибыль"
-            value={formatSignedMinorStat(stats.totalProfitMinor)}
-            valueClassName={getToneClass(stats.totalProfitMinor)}
-          />
-          <Metric label="ROI" value={formatPercentFromBps(stats.roiBps)} />
-          <Metric label="Победы" value={formatPercentFromBps(stats.winRateBps)} />
-          <Metric label="Стабильность" value={formatPercentFromBps(stats.stabilityScoreBps)} />
-          <Metric
-            label="Средний результат"
-            value={formatSignedMinorStat(stats.avgProfitMinor)}
-            valueClassName={getToneClass(stats.avgProfitMinor)}
-          />
-          <Metric
-            label="Лучшая игра"
-            value={formatSignedMinorStat(stats.bestGameMinor)}
-            valueClassName={getToneClass(stats.bestGameMinor)}
-          />
+    <ScreenLayout>
+      <section className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,11rem)] gap-4">
+        <div className="min-w-0">
+          <h2 className="truncate font-display text-[2.4rem] font-semibold leading-none text-white">
+            {user.displayName}
+          </h2>
+          <p className="mt-3 text-[1.1rem] text-muted">
+            {user.username ? `@${user.username}` : "Показатели по завершённым играм"}
+          </p>
         </div>
-        <div className="border-t border-border pt-4">
-          <Metric
-            label="Самая сложная игра"
-            value={formatSignedMinorStat(stats.worstGameMinor)}
-            valueClassName={getToneClass(stats.worstGameMinor)}
-          />
+        <div className={cn(cardClassName, "flex flex-col justify-center px-4 py-4")}>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted">Poker Score</p>
+          <p className="mt-3 font-display text-[3rem] font-semibold leading-none text-accent">
+            {stats.pokerScore}
+          </p>
         </div>
+      </section>
+
+      <section className="grid grid-cols-2 gap-3">
+        <Metric
+          className={cardClassName}
+          label="Общий итог"
+          value={formatSignedMinorStat(stats.totalProfitMinor)}
+          valueClassName={getToneClass(stats.totalProfitMinor)}
+        />
+        <Metric className={cardClassName} label="Игр сыграно" value={String(stats.gamesCount)} />
+        <Metric className={cardClassName} label="ROI" value={formatPercentFromBps(stats.roiBps)} />
+        <Metric
+          className={cardClassName}
+          label="Победы"
+          value={formatPercentFromBps(stats.winRateBps)}
+        />
+      </section>
+
+      <section className={cn(cardClassName, "space-y-4")}>
+        <h3 className="text-[1.9rem] font-semibold text-white">Последние результаты</h3>
+        <StatRow
+          label="Лучшая игра"
+          value={formatSignedMinorStat(stats.bestGameMinor)}
+          valueClassName={getToneClass(stats.bestGameMinor)}
+        />
+        <StatRow
+          label="Самая сложная игра"
+          value={formatSignedMinorStat(stats.worstGameMinor)}
+          valueClassName={getToneClass(stats.worstGameMinor)}
+        />
+        <StatRow label="Средний результат" value={formatSignedMinorStat(stats.avgProfitMinor)} valueClassName={getToneClass(stats.avgProfitMinor)} />
+        <StatRow label="Стабильность" value={formatPercentFromBps(stats.stabilityScoreBps)} />
       </section>
 
       <section className="space-y-3">
@@ -742,13 +964,13 @@ function PlayerProfileScreen(): JSX.Element {
           />
         ) : null}
         {recentGames.map((game: GetPlayerProfileResponseDto["recentGames"][number]) => (
-          <article key={game.roomId} className={mutedCardClassName}>
+          <article key={game.roomId} className={cn(mutedCardClassName, "px-4 py-4")}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-base font-semibold">{game.title}</p>
+                <p className="truncate text-xl font-semibold text-white">{game.title}</p>
                 <p className="mt-1 text-sm text-muted">{formatDate(game.closedAt)}</p>
               </div>
-              <span className="rounded-full bg-card px-3 py-1 text-xs text-muted">
+              <span className="rounded-full border border-white/10 bg-surfaceHigher px-3 py-1 text-xs text-muted">
                 {game.playersCount} {getPlayersLabel(game.playersCount)}
               </span>
             </div>
@@ -812,13 +1034,16 @@ function CreateRoomScreen(): JSX.Element {
   }
 
   return (
-    <ScreenLayout
-      title="Создать стол"
-      subtitle="Подготовьте игру и сразу получите ссылку для приглашения."
-      backTo={getHomeRoute()}
-      banner={state.status === "unsupported" ? getSessionBanner(state.status, null) : null}
-    >
-      <form className={`${cardClassName} space-y-4`} onSubmit={(event) => void handleSubmit(event)}>
+    <ScreenLayout banner={state.status === "unsupported" ? getSessionBanner(state.status, null) : null}>
+      <section className={cn(cardClassName, "relative overflow-hidden px-4 py-4")}>
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(78,222,163,0.08),transparent_55%)]" />
+        <div className="relative">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Настройка стола</p>
+          <h2 className="mt-2 text-[1.8rem] font-semibold text-white">Новая игра</h2>
+        </div>
+      </section>
+
+      <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
         <Field label="Как назовём игру?">
           <input
             className={inputClassName}
@@ -830,30 +1055,45 @@ function CreateRoomScreen(): JSX.Element {
         </Field>
 
         <Field label="В какой валюте считаем?">
-          <select
-            className={selectClassName}
-            value={values.currency}
-            onChange={(event) =>
-              setValues((current) => ({ ...current, currency: event.target.value }))
-            }
-          >
-            <option value="RUB">Рубли</option>
-            <option value="USD">Доллары</option>
-            <option value="EUR">Евро</option>
-          </select>
+          <div className="mt-2 grid grid-cols-3 gap-3">
+            {[
+              { value: "RUB", label: "RUB" },
+              { value: "USD", label: "USD" },
+              { value: "EUR", label: "EUR" }
+            ].map((option) => (
+              <button
+                key={option.value}
+                className={getFilterButtonClass(values.currency === option.value)}
+                onClick={() => setValues((current) => ({ ...current, currency: option.value }))}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </Field>
 
-        <Field label="Сколько стоит один ребай?">
-          <input
-            className={inputClassName}
-            inputMode="decimal"
-            value={values.rebuyAmount}
-            onChange={(event) =>
-              setValues((current) => ({ ...current, rebuyAmount: event.target.value }))
-            }
-            placeholder="Например, 1000"
-          />
-        </Field>
+        <section className="glass-card rounded-2xl border border-accent/25 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(20,20,20,0.7))] px-4 py-4">
+          <p className="flex items-center gap-2 text-sm font-medium text-accent">
+            <MaterialIcon icon="add_circle" />
+            Сумма ребая
+          </p>
+          <div className="mt-4 flex items-end justify-between gap-3">
+            <input
+              className="w-full bg-transparent text-[2.3rem] font-semibold leading-none text-white outline-none placeholder:text-white/25"
+              inputMode="decimal"
+              value={values.rebuyAmount}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, rebuyAmount: event.target.value }))
+              }
+              placeholder="1000"
+            />
+            <span className="pb-1 text-[1.8rem] font-semibold text-accent">
+              {getCurrencySymbol(values.currency)}
+            </span>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-muted">Фиксированная сумма для каждого нового ребая.</p>
+        </section>
 
         <Field label="Стартовый стек">
           <input
@@ -867,25 +1107,76 @@ function CreateRoomScreen(): JSX.Element {
           />
         </Field>
 
-        <Field label="Кто может добавлять ребаи">
-          <select
-            className={selectClassName}
-            value={values.rebuyPermission}
-            onChange={(event) =>
-              setValues((current) => ({
-                ...current,
-                rebuyPermission: event.target.value as CreateRoomFormValues["rebuyPermission"]
-              }))
-            }
-          >
-            <option value="PLAYER_SELF">Игроки могут добавлять себе</option>
-            <option value="ADMIN_APPROVAL">Через админа</option>
-            <option value="ADMIN_ONLY">Только админ</option>
-          </select>
+        <Field label="Кто добавляет ребаи">
+          <div className="mt-2 space-y-3">
+            {([
+              {
+                value: "PLAYER_SELF",
+                label: "Игроки сами отмечают ребаи",
+                icon: "person_add"
+              },
+              {
+                value: "ADMIN_APPROVAL",
+                label: "Админ подтверждает каждый ребай",
+                icon: "verified_user"
+              },
+              {
+                value: "ADMIN_ONLY",
+                label: "Только админ добавляет ребаи",
+                icon: "admin_panel_settings"
+              }
+            ] as const).map((option) => {
+              const isActive = values.rebuyPermission === option.value;
+
+              return (
+                <button
+                  key={option.value}
+                  className={cn(
+                    "flex min-h-12 w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition",
+                    isActive
+                      ? "border-accent/50 bg-accent/10"
+                      : "border-white/8 bg-white/[0.02] hover:bg-white/[0.04]"
+                  )}
+                  onClick={() =>
+                    setValues((current) => ({
+                      ...current,
+                      rebuyPermission: option.value
+                    }))
+                  }
+                  type="button"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className={cn("text-muted", isActive && "text-accent")}>
+                      <MaterialIcon icon={option.icon} />
+                    </span>
+                    <span className={cn("text-sm", isActive ? "text-white" : "text-muted")}>
+                      {option.label}
+                    </span>
+                  </span>
+                  <span
+                    className={cn(
+                      "h-5 w-5 rounded-full border",
+                      isActive ? "border-accent bg-accent" : "border-white/15 bg-transparent"
+                    )}
+                  />
+                </button>
+              );
+            })}
+          </div>
         </Field>
 
+        <section className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
+          <p className="text-sm font-semibold text-white">Что получится</p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Metric label="Ребай" value={values.rebuyAmount.trim() || "Не задан"} />
+            <Metric label="Стек" value={values.startingStack.trim() || "Не задан"} />
+            <Metric label="Валюта" value={getCurrencyLabel(values.currency)} />
+            <Metric label="Режим" value={getRebuyPermissionLabel(values.rebuyPermission)} />
+          </div>
+        </section>
+
         {errorMessage ? (
-          <p className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <p className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
             {errorMessage}
           </p>
         ) : null}
@@ -1357,11 +1648,7 @@ function RoomScreen(): JSX.Element {
         : false;
 
   return (
-    <ScreenLayout
-      title={room.title}
-      subtitle={getRoomScreenSubtitle(roomSurface)}
-      backTo={getHomeRoute()}
-    >
+    <ScreenLayout>
       {roomState.status === "error" ? (
         <p className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
           {roomState.errorMessage}
@@ -1479,28 +1766,47 @@ function JoinRoomScreen(): JSX.Element {
   }
 
   return (
-    <ScreenLayout
-      title="Вас пригласили в игру"
-      subtitle="После входа добавим вас в список игроков и откроем стол."
-      backTo={getHomeRoute()}
-      banner={getSessionBanner(state.status, state.errorMessage)}
-    >
-      <section className={`${cardClassName} space-y-3`}>
-        <div>
-          <p className="text-sm text-muted">Код приглашения</p>
-          <p className="mt-2 text-lg font-semibold">{inviteCode}</p>
+    <ScreenLayout banner={getSessionBanner(state.status, state.errorMessage)}>
+      <section className="flex min-h-[calc(100dvh-12rem)] flex-col justify-center gap-5 pb-4 text-center">
+        <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full border-2 border-accent bg-[radial-gradient(circle,rgba(78,222,163,0.14),rgba(18,18,18,0.95))] text-white shadow-glow">
+          <span className="font-display text-[2rem] font-semibold">
+            {getInviteInitials(inviteCode)}
+          </span>
         </div>
-        <p className="text-sm leading-6 text-muted">
-          Если вы уже в игре, просто откроем стол. Если нет, добавим вас одним нажатием.
-        </p>
+        <div className="space-y-3">
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">
+            Приглашение в игру
+          </p>
+          <h2 className="font-display text-[2.5rem] font-semibold leading-tight text-white">
+            Готовы присоединиться?
+          </h2>
+          <p className="mx-auto max-w-[20rem] text-base leading-7 text-muted">
+            Добавим вас к столу по коду приглашения и сразу откроем текущую игру.
+          </p>
+        </div>
+
+        <section className="grid grid-cols-2 gap-3">
+          <Metric className={cardClassName} label="Код" value={inviteCode.toUpperCase()} />
+          <Metric className={cardClassName} label="Статус" value="Ожидает входа" />
+        </section>
+
         {errorMessage ? (
-          <p className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <p className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
             {errorMessage}
           </p>
         ) : null}
-        <Button className="w-full" disabled={isSubmitting} onClick={() => void handleJoin()}>
-          {isSubmitting ? "Подключаем стол" : "Присоединиться"}
-        </Button>
+
+        <div className="space-y-3">
+          <Button className="w-full" disabled={isSubmitting} onClick={() => void handleJoin()}>
+            <MaterialIcon icon="login" />
+            {isSubmitting ? "Подключаем стол" : "Присоединиться к игре"}
+          </Button>
+          {state.status === "unsupported" ? (
+            <p className="text-sm leading-6 text-muted">
+              Для реального входа откройте эту ссылку в Telegram Mini App.
+            </p>
+          ) : null}
+        </div>
       </section>
     </ScreenLayout>
   );
@@ -1513,25 +1819,28 @@ function ScreenLayout({
   banner,
   children
 }: {
-  title: string;
-  subtitle: string;
+  title?: string;
+  subtitle?: string;
   backTo?: string;
   banner?: JSX.Element | null;
   children: ReactNode;
 }): JSX.Element {
   return (
     <>
-      <header className="space-y-3 pt-2">
-        {backTo ? (
-          <Link className="inline-flex text-sm text-muted" to={backTo}>
-            Назад
-          </Link>
-        ) : null}
-        <div>
-          <h1 className="text-3xl font-semibold">{title}</h1>
-          <p className="mt-2 text-sm leading-6 text-muted">{subtitle}</p>
-        </div>
-      </header>
+      {title ? (
+        <header className="space-y-3 pt-1">
+          {backTo ? (
+            <Link className="inline-flex items-center gap-2 text-sm font-medium text-muted" to={backTo}>
+              <MaterialIcon icon="arrow_back_ios_new" />
+              Назад
+            </Link>
+          ) : null}
+          <div>
+            <h1 className="font-display text-[2.1rem] font-semibold leading-tight text-white">{title}</h1>
+            {subtitle ? <p className="mt-2 max-w-[24rem] text-base leading-7 text-muted">{subtitle}</p> : null}
+          </div>
+        </header>
+      ) : null}
       {banner}
       <div className="space-y-4">{children}</div>
     </>
@@ -1561,8 +1870,8 @@ function InfoCard({
   description: string;
 }): JSX.Element {
   return (
-    <section className={mutedCardClassName}>
-      <p className="text-base font-semibold">{title}</p>
+    <section className="glass-info rounded-2xl px-4 py-4">
+      <p className="text-lg font-semibold text-white">{title}</p>
       <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
     </section>
   );
@@ -1604,15 +1913,15 @@ function ConfirmationDialog({
     confirmationState.kind === "create-rebuy" ? "Сохраняем ребай" : "Отменяем ребай";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/60 px-4 pb-4 pt-10 sm:items-center sm:justify-center">
-      <div className="w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-2xl">
-        <p className="text-lg font-semibold">{title}</p>
-        <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
+    <div className="fixed inset-0 z-50 flex items-end bg-black/70 px-4 pb-4 pt-10 sm:items-center sm:justify-center">
+      <div className="glass-card w-full rounded-[1.5rem] p-5 shadow-2xl sm:max-w-md">
+        <p className="font-display text-[1.65rem] font-semibold leading-tight text-white">{title}</p>
+        <p className="mt-3 text-sm leading-6 text-muted">{description}</p>
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <Button className="border border-border bg-background/60 text-foreground" disabled={isPending} onClick={onCancel}>
+          <Button className={cn(secondaryButtonClassName, "w-full")} disabled={isPending} onClick={onCancel}>
             Пока нет
           </Button>
-          <Button disabled={isPending} onClick={onConfirm}>
+          <Button className="w-full" disabled={isPending} onClick={onConfirm}>
             {isPending ? pendingLabel : confirmLabel}
           </Button>
         </div>
@@ -1623,20 +1932,44 @@ function ConfirmationDialog({
 
 function SectionHeading({
   title,
-  description
+  description,
+  action
 }: {
   title: string;
   description: string;
+  action?: ReactNode;
 }): JSX.Element {
   return (
-    <div>
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-muted">{description}</p>
+    <div className="flex items-end justify-between gap-3">
+      <div>
+        <h2 className="font-display text-[2rem] font-semibold leading-tight text-white">{title}</h2>
+        <p className="mt-1 text-sm text-muted">{description}</p>
+      </div>
+      {action}
     </div>
   );
 }
 
 function Metric({
+  label,
+  value,
+  className,
+  valueClassName
+}: {
+  label: string;
+  value: string;
+  className?: string;
+  valueClassName?: string;
+}): JSX.Element {
+  return (
+    <div className={className}>
+      <p className="text-[11px] uppercase tracking-[0.16em] text-muted">{label}</p>
+      <p className={cn("mt-1 text-xl font-semibold text-white", valueClassName)}>{value}</p>
+    </div>
+  );
+}
+
+function StatRow({
   label,
   value,
   valueClassName
@@ -1646,9 +1979,9 @@ function Metric({
   valueClassName?: string;
 }): JSX.Element {
   return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
-      <p className={cn("mt-1 text-sm font-medium text-foreground", valueClassName)}>{value}</p>
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-base text-muted">{label}</span>
+      <span className={cn("text-[1.05rem] font-semibold text-white", valueClassName)}>{value}</span>
     </div>
   );
 }
@@ -1659,12 +1992,18 @@ function getSessionBanner(
 ): JSX.Element | null {
   if (status === "unsupported") {
     return (
-      <section className="rounded-lg border border-dashed border-border bg-background/50 p-4">
-        <p className="text-sm font-medium">Режим просмотра в браузере</p>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          Интерфейс можно посмотреть и проверить локально, но приватные действия работают
-          только после запуска Mini App в Telegram.
-        </p>
+      <section className="glass-info rounded-2xl px-4 py-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 text-accent">
+            <MaterialIcon icon="info" />
+          </span>
+          <div>
+            <p className="text-sm font-medium text-white">Режим просмотра в браузере</p>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Интерфейс можно проверить локально, но приватные действия работают только после запуска Mini App в Telegram.
+            </p>
+          </div>
+        </div>
       </section>
     );
   }
@@ -1678,21 +2017,6 @@ function getSessionBanner(
   }
 
   return null;
-}
-
-function getRoomScreenSubtitle(surface: ReturnType<typeof getRoomSurface>): string {
-  switch (surface) {
-    case "waiting":
-      return "Ожидание игроков";
-    case "active-admin":
-      return "Активный стол";
-    case "active-player":
-      return "Игра уже идёт";
-    case "closed":
-      return "Финальные результаты";
-    default:
-      return "Статус игры";
-  }
 }
 
 function getRoomStatusText(status: string): string {
@@ -1712,12 +2036,135 @@ function getRoomStatusText(status: string): string {
 
 function getFilterButtonClass(isActive: boolean, sizeClassName = "px-4"): string {
   return cn(
-    "inline-flex min-h-11 items-center justify-center rounded-md border text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+    "inline-flex min-h-12 items-center justify-center rounded-xl border text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
     sizeClassName,
     isActive
-      ? "border-accent bg-accent text-slate-950"
-      : "border-border bg-background/60 text-foreground hover:bg-background"
+      ? "border-accent bg-accent text-[#032517]"
+      : "border-white/10 bg-surfaceHigh text-foreground hover:bg-surfaceHigher"
   );
+}
+
+function MaterialIcon({
+  icon,
+  filled = false
+}: {
+  icon: string;
+  filled?: boolean;
+}): JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className="material-symbols-outlined"
+      style={{
+        fontVariationSettings: `'FILL' ${filled ? 1 : 0}, 'wght' 500, 'GRAD' 0, 'opsz' 24`
+      }}
+    >
+      {icon}
+    </span>
+  );
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+
+  if (hour < 6) {
+    return "Доброй ночи";
+  }
+
+  if (hour < 12) {
+    return "Доброе утро";
+  }
+
+  if (hour < 18) {
+    return "Добрый день";
+  }
+
+  return "Добрый вечер";
+}
+
+function getChromeSubtitle(pathname: string): string {
+  if (pathname === getLeaderboardRoute()) {
+    return "Рейтинг игроков";
+  }
+
+  if (pathname === getCreateRoomRoute()) {
+    return "Новый стол";
+  }
+
+  if (pathname.startsWith("/join/")) {
+    return "Приглашение в игру";
+  }
+
+  if (pathname.startsWith("/players/")) {
+    return "Профиль игрока";
+  }
+
+  if (pathname.startsWith("/rooms/")) {
+    return "Стол и расчёты";
+  }
+
+  return "Poker tracker";
+}
+
+function isGamesRoute(pathname: string): boolean {
+  return (
+    pathname === getCreateRoomRoute() ||
+    pathname.startsWith("/join/") ||
+    pathname.startsWith("/rooms/")
+  );
+}
+
+function getGamesRoute(pathname: string): string {
+  return isGamesRoute(pathname) ? pathname : getCreateRoomRoute();
+}
+
+function isOwnProfilePath(pathname: string, currentUserId: string | null): boolean {
+  return currentUserId !== null && pathname === getPlayerRoute(currentUserId);
+}
+
+function getCurrencyLabel(currency: string): string {
+  switch (currency.toUpperCase()) {
+    case "USD":
+      return "Доллары";
+    case "EUR":
+      return "Евро";
+    default:
+      return "Рубли";
+  }
+}
+
+function getRebuyPermissionLabel(permission: CreateRoomFormValues["rebuyPermission"]): string {
+  switch (permission) {
+    case "ADMIN_APPROVAL":
+      return "Через админа";
+    case "ADMIN_ONLY":
+      return "Только админ";
+    default:
+      return "Игрок сам";
+  }
+}
+
+function getScopeDescription(scope: (typeof DEFAULT_LEADERBOARD_QUERY)["scope"]): string {
+  return scope === "played-with-me"
+    ? "Игроки, с которыми у вас уже был хотя бы один общий завершённый стол."
+    : "Общий рейтинг по завершённым играм внутри Poker Table.";
+}
+
+function getCurrencySymbol(currency: string): string {
+  switch (currency.toUpperCase()) {
+    case "USD":
+      return "$";
+    case "EUR":
+      return "€";
+    default:
+      return "₽";
+  }
+}
+
+function getInviteInitials(inviteCode: string): string {
+  const compact = inviteCode.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+
+  return compact.slice(0, 2) || "PT";
 }
 
 function getGamesLabel(count: number): string {

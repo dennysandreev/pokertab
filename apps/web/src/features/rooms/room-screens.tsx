@@ -73,11 +73,20 @@ type SettlementInputScreenProps = RoomScreenProps & {
   onCloseSettlement: () => void;
 };
 
-const cardClassName = "rounded-lg border border-border bg-card p-4";
-const mutedCardClassName = "rounded-lg border border-border bg-background/50 p-4";
-const secondaryButtonClassName = "border border-border bg-background/60 text-foreground";
+const cardClassName =
+  "glass-card rounded-[1.25rem] border border-white/10 bg-[#1a1a1a]/80 p-4 backdrop-blur-xl";
+const mutedCardClassName =
+  "rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4";
+const secondaryButtonClassName =
+  "border border-white/10 bg-[#252525] text-white hover:bg-[#2d2d2d]";
+const iconButtonClassName =
+  "h-12 w-12 rounded-2xl border border-white/10 bg-[#252525] p-0 text-[#e5e2e1] hover:bg-[#2d2d2d]";
 const inputClassName =
-  "mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-accent";
+  "mt-3 min-h-12 w-full rounded-xl border border-white/10 bg-[#252525] px-4 py-3 text-right text-lg font-semibold text-white outline-none transition placeholder:text-[#8e9192] focus:border-[#4edea3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4edea3]";
+const metricCardClassName =
+  "rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3";
+const rowCardClassName =
+  "rounded-[1rem] border border-white/10 bg-[#1c1b1b]/90 px-3 py-3";
 
 export function WaitingRoom({
   data,
@@ -93,77 +102,103 @@ export function WaitingRoom({
     <div className="space-y-4">
       <section className={cardClassName}>
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-emerald-300">
-              {canStart ? "Все почти готовы" : "Ожидаем старт"}
-            </p>
-            <h2 className="mt-2 text-xl font-semibold">{room.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-muted">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#a0a7ab]">
+              <span className="h-2 w-2 rounded-full bg-[#4edea3]" />
+              {canStart ? "Все на месте" : "Ожидание игроков"}
+            </div>
+            <h2 className="mt-3 text-[2rem] font-bold leading-none text-white">{room.title}</h2>
+            <p className="mt-3 max-w-[28rem] text-sm leading-6 text-[#c4c7c8]">
               {canStart
-                ? "Когда все на месте, можно запускать игру."
-                : "Как только админ нажмёт «Начать игру», стол переключится в активный режим."}
+                ? "Лобби собрано. Можно запускать игру и сразу открыть закупы."
+                : "Как только админ начнет игру, здесь появится активный стол и история ребаев."}
             </p>
           </div>
           <RoleChip role={room.myRole} />
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-muted">
-          <Metric label="Статус" value="Ожидание игроков" />
-          <Metric label="Игроков" value={String(room.playersCount)} />
+
+        <div className="mt-5 grid grid-cols-2 gap-3">
           <Metric label="Ребай" value={formatMinorMoney(room.rebuyAmountMinor, room.currency)} />
           <Metric
             label="Стартовый стек"
             value={
               room.startingStack
                 ? `${room.startingStack.toLocaleString("ru-RU")} фишек`
-                : "Не задан"
+                : "Не указан"
             }
           />
         </div>
       </section>
 
-      <section className={`${cardClassName} space-y-3`}>
-        <div>
-          <p className="text-base font-semibold">Участники</p>
-          <p className="mt-1 text-sm text-muted">
-            Список виден всем, а старт доступен только админу.
-          </p>
+      <section className="grid grid-cols-2 gap-3">
+        <article className={`${cardClassName} aspect-square`}>
+          <div className="flex h-full flex-col justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
+                Игроков
+              </p>
+              <p className="mt-2 text-4xl font-bold leading-none text-white">{room.playersCount}</p>
+              <p className="mt-2 text-sm text-[#c4c7c8]">Состав лобби виден всем участникам.</p>
+            </div>
+            <Button className={iconButtonClassName} onClick={onCopyInvite}>
+              <span className="material-symbols-outlined text-[20px]">content_copy</span>
+            </Button>
+          </div>
+        </article>
+
+        <article className={`${cardClassName} aspect-square`}>
+          <div className="flex h-full flex-col justify-between">
+            <div>
+              <span className="material-symbols-outlined text-[#4edea3]">share</span>
+              <p className="mt-3 text-lg font-semibold text-white">Пригласить игроков</p>
+              <p className="mt-2 text-sm leading-6 text-[#c4c7c8]">
+                Ссылка ведет прямо в эту комнату.
+              </p>
+            </div>
+            <Button className={secondaryButtonClassName} onClick={onShareInvite}>
+              <span className="material-symbols-outlined text-[18px]">send</span>
+              Поделиться
+            </Button>
+          </div>
+        </article>
+      </section>
+
+      <section className={cardClassName}>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xl font-semibold text-white">Игроки в лобби</p>
+            <p className="mt-1 text-sm text-[#c4c7c8]">Старт доступен только админу.</p>
+          </div>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#4edea3]">
+            {room.playersCount} за столом
+          </span>
         </div>
-        <div className="space-y-2">
+        <div className="mt-4 space-y-2">
           {players.map((player) => (
             <PlayerRow key={player.id} player={player} />
           ))}
         </div>
       </section>
 
-      <section className={`${cardClassName} space-y-3`}>
-        <p className="text-base font-semibold">Приглашение</p>
-        <p className="text-sm leading-6 text-muted">
-          Поделитесь ссылкой, чтобы друзья сразу попали в этот стол.
+      <section className={mutedCardClassName}>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
+          Ссылка комнаты
         </p>
-        <div className="rounded-md border border-border bg-background/60 px-3 py-3 text-sm text-muted break-all">
-          {room.inviteUrl}
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Button className="w-full" onClick={onCopyInvite}>
-            Скопировать ссылку
-          </Button>
-          <Button className="w-full bg-slate-200 text-slate-950" onClick={onShareInvite}>
-            Поделиться
-          </Button>
-        </div>
+        <p className="mt-2 break-all text-sm leading-6 text-[#e5e2e1]">{room.inviteUrl}</p>
       </section>
 
       {canStart ? (
-        <Button className="w-full" disabled={isStarting} onClick={onStart}>
-          {isStarting ? "Запускаем игру" : "Начать игру"}
-        </Button>
-      ) : (
-        <section className={mutedCardClassName}>
-          <p className="text-sm font-medium">Ждём сигнал от админа</p>
-          <p className="mt-2 text-sm leading-6 text-muted">
-            Как только игра начнётся, здесь появятся закупы и состав активного стола.
+        <div className="space-y-3">
+          <Button className="w-full" disabled={isStarting} onClick={onStart}>
+            <span className="material-symbols-outlined text-[20px]">play_circle</span>
+            {isStarting ? "Запускаем игру" : "Начать игру"}
+          </Button>
+          <p className="text-center text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
+            Минимум два игрока для старта
           </p>
-        </section>
+        </div>
+      ) : (
+        <InfoText text="Ждем, пока админ откроет игру." />
       )}
     </div>
   );
@@ -187,43 +222,50 @@ export function ActiveRoomPlayer({
     <div className="space-y-4">
       <ActiveRoomHeader
         room={room}
-        title="Игра идёт"
-        description="Сейчас можно следить за составом стола и своими закупами."
+        title="Игра идет"
+        description="Следите за составом стола и своими закупами в реальном времени."
       />
 
-      <section className={`${cardClassName} space-y-3`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-base font-semibold">Твои закупы</p>
-            <p className="mt-1 text-sm text-muted">
-              Здесь видны ваши текущие суммы по игре.
-            </p>
+      <section className={`${cardClassName} relative overflow-hidden`}>
+        <div className="absolute right-0 top-0 h-28 w-28 rounded-full bg-[#4edea3]/10 blur-3xl" />
+        <div className="relative space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
+                Ваши закупы
+              </p>
+              <p className="mt-2 text-[2.5rem] font-bold leading-none text-white">
+                {formatMinorMoney(myPlayer?.totalBuyinMinor ?? "0", room.currency)}
+              </p>
+              <p className="mt-2 text-sm text-[#c4c7c8]">
+                {myPlayer?.rebuyCount ?? 0} ребаев
+              </p>
+            </div>
+            <RoleChip role={room.myRole} />
           </div>
-          <RoleChip role={room.myRole} />
+
+          <Button
+            className="w-full"
+            disabled={!canSelfRebuy || isCreatingSelfRebuy}
+            onClick={onSelfRebuy}
+          >
+            <span className="material-symbols-outlined text-[20px]">add_circle</span>
+            {isCreatingSelfRebuy
+              ? "Добавляем ребай"
+              : `Добавить ребай — ${formatMinorMoney(room.rebuyAmountMinor, room.currency)}`}
+          </Button>
+          <p className="text-sm leading-6 text-[#c4c7c8]">{selfRebuyHint}</p>
         </div>
-        <div className="grid grid-cols-2 gap-3 text-sm text-muted">
-          <Metric label="Ребаев" value={String(myPlayer?.rebuyCount ?? 0)} />
-          <Metric
-            label="Всего"
-            value={formatMinorMoney(myPlayer?.totalBuyinMinor ?? "0", room.currency)}
-          />
-        </div>
-        <Button className="w-full" disabled={!canSelfRebuy || isCreatingSelfRebuy} onClick={onSelfRebuy}>
-          {isCreatingSelfRebuy
-            ? "Добавляем ребай"
-            : `+ Ребай — ${formatMinorMoney(room.rebuyAmountMinor, room.currency)}`}
-        </Button>
-        <p className="text-sm text-muted">{selfRebuyHint}</p>
       </section>
 
-      <section className={`${cardClassName} space-y-3`}>
-        <div>
-          <p className="text-base font-semibold">Игроки за столом</p>
-          <p className="mt-1 text-sm text-muted">
-            По каждому игроку видно текущее количество ребаев и общую сумму.
+      <section className={cardClassName}>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
+            Игроки за столом
           </p>
+          <span className="material-symbols-outlined text-[#8e9192]">group</span>
         </div>
-        <div className="space-y-2">
+        <div className="mt-4 space-y-2">
           {activePlayers.map((player) => (
             <PlayerTotalsRow key={player.id} player={player} currency={room.currency} />
           ))}
@@ -258,44 +300,42 @@ export function ActiveRoomAdmin({
     <div className="space-y-4">
       <ActiveRoomHeader
         room={room}
-        title="Режим админа"
-        description="Здесь можно быстро добавлять ребаи и проверять историю стола."
-        badge="Админ"
+        title="Режим администратора"
+        description="Добавляйте ребаи игрокам, сверяйте историю и готовьте финальный расчет."
+        badge="LIVE"
       />
 
-      <section className={`${cardClassName} space-y-3`}>
-        <div>
-          <p className="text-base font-semibold">Игроки</p>
-          <p className="mt-1 text-sm text-muted">
-            Добавляйте ребай только тем, кто сейчас играет за этим столом.
-          </p>
+      <section className={cardClassName}>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-lg font-semibold text-white">Управление игроками</p>
+          <RoleChip role={room.myRole} />
         </div>
-        <div className="space-y-3">
+        <div className="mt-4 space-y-3">
           {activePlayers.map((player) => (
             <article
               key={player.id}
-              className="rounded-md border border-border bg-background/50 px-3 py-3"
+              className={cn(
+                rowCardClassName,
+                player.id === room.myPlayerId && "border-l-4 border-l-[#4edea3]"
+              )}
             >
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">{player.displayName}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {getRoleText(player.role)} · {player.rebuyCount} ребаев
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">
+                    {player.displayName}
+                    {player.id === room.myPlayerId ? " (вы)" : ""}
+                  </p>
+                  <p className="mt-1 text-xs text-[#8e9192]">
+                    {player.rebuyCount} ребаев · {formatMinorMoney(player.totalBuyinMinor, room.currency)}
                   </p>
                 </div>
-                <p className="text-sm font-medium text-foreground">
-                  {formatMinorMoney(player.totalBuyinMinor, room.currency)}
-                </p>
-              </div>
-              <div className="mt-3">
                 <Button
-                  className="w-full"
+                  className="h-9 rounded-xl px-3 text-sm"
                   disabled={addingRebuyForPlayerId === player.id}
                   onClick={() => onAddRebuy(player)}
                 >
-                  {addingRebuyForPlayerId === player.id
-                    ? "Добавляем ребай"
-                    : `+ Ребай — ${formatMinorMoney(room.rebuyAmountMinor, room.currency)}`}
+                  <span className="material-symbols-outlined text-[18px]">add</span>
+                  {addingRebuyForPlayerId === player.id ? "Добавляем" : "Ребай"}
                 </Button>
               </div>
             </article>
@@ -313,16 +353,17 @@ export function ActiveRoomAdmin({
         onToggle={onToggleHistory}
       />
 
-      <section className={`${cardClassName} space-y-3`}>
-        <div>
-          <p className="text-base font-semibold">Следующий этап</p>
-          <p className="mt-1 text-sm text-muted">
-            Когда все ребаи внесены, можно переходить к финальным суммам.
-          </p>
+      <section className={cardClassName}>
+        <div className="grid grid-cols-2 gap-3">
+          <Button className={secondaryButtonClassName} onClick={onToggleHistory}>
+            <span className="material-symbols-outlined text-[18px]">history</span>
+            {isHistoryOpen ? "Скрыть историю" : "Открыть историю"}
+          </Button>
+          <Button className="w-full" onClick={onOpenSettlement}>
+            <span className="material-symbols-outlined text-[18px]">calculate</span>
+            К расчету
+          </Button>
         </div>
-        <Button className={`${secondaryButtonClassName} w-full`} onClick={onOpenSettlement}>
-          Перейти к расчёту
-        </Button>
       </section>
     </div>
   );
@@ -349,137 +390,157 @@ export function SettlementInputScreen({
   const differenceMessage = getSettlementDifferenceMessage(summary.differenceMinor, room.currency);
   const previewResults = isPreviewCurrent ? preview?.players ?? [] : [];
   const previewTransfers = isPreviewCurrent ? preview?.transfers ?? [] : [];
+  const progressPercent = Math.round((getSettlementProgress(draftPlayers) / Math.max(draftPlayers.length, 1)) * 100);
 
   return (
     <div className="space-y-4">
       <section className={cardClassName}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-emerald-300">Расчёт игры</p>
-            <h2 className="mt-2 text-xl font-semibold">{room.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Введите итог по каждому активному игроку и проверьте, кому и сколько передать
-              после игры.
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
+              Расчет результатов
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold text-white">{room.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-[#c4c7c8]">
+              Введите финальную сумму каждого активного игрока. Это только итоговая инструкция после игры.
             </p>
           </div>
           <Button className={secondaryButtonClassName} onClick={onBack}>
+            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
             К столу
           </Button>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-muted">
+
+        <div className="mt-5 grid grid-cols-3 gap-2">
           <Metric
             label="Всего закупов"
             value={formatMinorMoney(summary.totalBuyinsMinor, room.currency)}
           />
           <Metric
-            label="Финальные суммы"
+            label="Введено"
             value={formatMinorMoney(summary.totalFinalAmountMinor, room.currency)}
           />
           <Metric
             label="Разница"
             value={formatMinorMoney(summary.differenceMinor, room.currency)}
+            tone={!summary.isBalanced ? "error" : "default"}
           />
-          <Metric label="Игроков" value={String(draftPlayers.length)} />
         </div>
       </section>
 
       {summary.isBalanced ? (
-        <InfoText text="Баланс сошёлся. Теперь можно проверить итог и закрыть игру." />
+        <InfoText text="Баланс сошелся. Можно проверить итог и закрыть игру." tone="success" />
       ) : differenceMessage ? (
         <InfoText text={differenceMessage} tone="error" />
       ) : null}
 
       {summary.hasMissingValues ? (
-        <InfoText text="Ещё не для всех игроков указана финальная сумма." tone="error" />
+        <InfoText text="Не у всех игроков заполнена финальная сумма." tone="error" />
       ) : null}
 
       {summary.hasInvalidValues ? (
         <InfoText
-          text="Некоторые суммы не удалось распознать. Используйте формат вроде 7500 или 7500,50."
+          text="Одна из сумм выглядит неверно. Подойдет формат вроде 7500 или 7500,50."
           tone="error"
         />
       ) : null}
 
-      <section className={`${cardClassName} space-y-3`}>
-        <div>
-          <p className="text-base font-semibold">Финальные суммы</p>
-          <p className="mt-1 text-sm text-muted">
-            Это не перевод денег в приложении, а только итоговая инструкция по игре.
-          </p>
+      <section className={cardClassName}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-lg font-semibold text-white">Финальные суммы</p>
+            <p className="mt-1 text-sm text-[#c4c7c8]">Введите, сколько осталось у каждого игрока.</p>
+          </div>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#4edea3]">
+            {progressPercent}%
+          </span>
         </div>
-        <div className="space-y-3">
+
+        <div className="mt-4 space-y-3">
           {draftPlayers.map((player) => (
             <article
               key={player.roomPlayerId}
               className={cn(
-                "rounded-md border bg-background/50 px-3 py-3",
-                player.roomPlayerId === room.myPlayerId
-                  ? "border-accent/50 bg-accent/5"
-                  : "border-border"
+                rowCardClassName,
+                player.roomPlayerId === room.myPlayerId && "border-[#4edea3]/40 bg-[#4edea3]/[0.06]"
               )}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
+              <div className="flex items-start gap-3">
+                <PlayerAvatar name={player.displayName} />
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground">{player.displayName}</p>
+                    <p className="truncate text-sm font-semibold text-white">{player.displayName}</p>
                     {player.roomPlayerId === room.myPlayerId ? (
-                      <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[11px] text-accent">
+                      <span className="rounded-full border border-[#4edea3]/20 bg-[#4edea3]/10 px-2 py-0.5 text-[11px] text-[#4edea3]">
                         Вы
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-xs text-muted">
+                  <p className="mt-1 text-xs text-[#8e9192]">
                     Закупы: {formatMinorMoney(player.totalBuyinMinor, room.currency)}
                   </p>
-                </div>
-                <div className="min-w-0 text-right">
-                  <p className={cn("text-sm font-medium", getNetResultClass(player.netResultMinor))}>
+                  <p className={cn("mt-1 text-xs font-semibold", getNetResultClass(player.netResultMinor))}>
                     {player.netResultMinor === null
                       ? "Результат появится после ввода"
                       : formatMinorMoney(player.netResultMinor, room.currency)}
                   </p>
-                  <p className="mt-1 text-xs text-muted">Предварительный итог</p>
                 </div>
               </div>
+
               <label className="mt-3 block">
-                <span className="text-sm font-medium text-foreground">Сколько осталось у игрока</span>
+                <span className="text-xs font-medium uppercase tracking-[0.18em] text-[#8e9192]">
+                  Финальная сумма
+                </span>
                 <input
                   className={inputClassName}
                   inputMode="decimal"
-                  placeholder="Например, 7500"
+                  placeholder="Например, 7 500"
                   value={player.finalAmountInput}
                   onChange={(event) => onChangeFinalAmount(player.roomPlayerId, event.target.value)}
                 />
               </label>
+
               {player.issue ? (
                 <p className="mt-2 text-sm text-rose-200">{getSettlementIssueText(player.issue)}</p>
               ) : null}
             </article>
           ))}
         </div>
+
+        <div className="mt-4">
+          <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
+            <span>Прогресс</span>
+            <span className="text-[#4edea3]">{progressPercent}%</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full rounded-full bg-[#4edea3] transition-[width]"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
       </section>
 
-      <section className={`${cardClassName} space-y-3`}>
-        <div>
-          <p className="text-base font-semibold">Проверка расчёта</p>
-          <p className="mt-1 text-sm text-muted">
-            Сначала сверим итог с сервером, а потом уже закроем игру.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Button className={`${secondaryButtonClassName} w-full`} onClick={onBack}>
+      <section className={cardClassName}>
+        <div className="space-y-3">
+          <Button className="w-full" disabled={!canPreview} onClick={onPreview}>
+            <span className="material-symbols-outlined text-[18px]">calculate</span>
+            {isPreviewLoading ? "Проверяем расчет" : "Проверить расчет"}
+          </Button>
+          <Button className={secondaryButtonClassName} onClick={onBack}>
             Вернуться к столу
           </Button>
-          <Button className="w-full" disabled={!canPreview} onClick={onPreview}>
-            {isPreviewLoading ? "Проверяем расчёт" : "Проверить расчёт"}
+          <Button className="w-full" disabled={!canClose} onClick={onCloseSettlement}>
+            <span className="material-symbols-outlined text-[18px]">done_all</span>
+            {isClosing ? "Закрываем игру" : "Закрыть игру"}
           </Button>
         </div>
-        <Button className="w-full" disabled={!canClose} onClick={onCloseSettlement}>
-          {isClosing ? "Закрываем игру" : "Закрыть игру и сохранить итог"}
-        </Button>
-        {previewErrorMessage ? <InfoText text={previewErrorMessage} tone="error" /> : null}
+
+        {previewErrorMessage ? <div className="mt-3"><InfoText text={previewErrorMessage} tone="error" /></div> : null}
         {isPreviewStale ? (
-          <InfoText text="Суммы изменились. Ещё раз проверьте расчёт перед закрытием." />
+          <div className="mt-3">
+            <InfoText text="Суммы изменились. Еще раз проверьте расчет перед закрытием." />
+          </div>
         ) : null}
       </section>
 
@@ -487,7 +548,7 @@ export function SettlementInputScreen({
         <ResultsSection
           currency={room.currency}
           currentPlayerId={room.myPlayerId}
-          description="Показываем, кто вышел в плюс, а кто заканчивает игру в минус."
+          description="Показываем плюс и минус по каждому игроку перед закрытием стола."
           players={previewResults}
           title="Предварительный итог"
         />
@@ -496,7 +557,7 @@ export function SettlementInputScreen({
       {isPreviewCurrent && preview?.differenceMinor === "0" ? (
         <TransferInstructionsSection
           currency={room.currency}
-          description="Это подсказка после игры: приложение только показывает, кому и сколько передать вручную."
+          description="Это ручная подсказка после игры. Переводы в приложении не выполняются."
           transfers={previewTransfers}
         />
       ) : null}
@@ -510,45 +571,60 @@ export function ClosedRoomResults({ data }: RoomScreenProps): JSX.Element {
   const resultPlayers = settlement?.players ?? fallbackPlayers;
   const totalBuyinsMinor = settlement?.totalBuyinsMinor ?? room.totalPotMinor;
   const totalFinalAmountMinor = settlement?.totalFinalAmountMinor ?? sumFinalAmounts(fallbackPlayers);
+  const myNetResult = getMyNetResult(resultPlayers, room.myPlayerId);
+  const myTransfer = settlement
+    ? getTransferForPlayer(settlement.transfers, room.myPlayerId)
+    : null;
 
   return (
     <div className="space-y-4">
       <section className={cardClassName}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-emerald-300">Игра завершена</p>
-            <h2 className="mt-2 text-xl font-semibold">{room.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Финальные суммы сохранены. Ниже итог по игрокам и инструкция по ручным
-              переводам, если они нужны.
-            </p>
-          </div>
-          <RoleChip role={room.myRole} />
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-muted">
-          <Metric label="Игроков" value={String(resultPlayers.length)} />
-          <Metric label="Общий стол" value={formatMinorMoney(totalBuyinsMinor, room.currency)} />
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
+          Игра завершена
+        </p>
+        <h2 className="mt-3 text-[2rem] font-bold leading-none text-white">Итоги сохранены</h2>
+        <p className="mt-2 text-sm leading-6 text-[#c4c7c8]">
+          {room.title} · {resultPlayers.length} игроков · Общий стол{" "}
+          {formatMinorMoney(totalBuyinsMinor, room.currency)}
+        </p>
+
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Metric label="Ваш итог" value={formatMinorMoney(myNetResult, room.currency)} />
           <Metric
             label="Финальные суммы"
             value={formatMinorMoney(totalFinalAmountMinor, room.currency)}
           />
-          <Metric
-            label="Твой итог"
-            value={formatMinorMoney(getMyNetResult(resultPlayers, room.myPlayerId), room.currency)}
-          />
         </div>
       </section>
 
+      {myTransfer ? (
+        <section className="rounded-[1.25rem] border border-[#4edea3]/30 bg-[#4edea3]/[0.08] p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#4edea3]/15 text-[#4edea3]">
+              <span className="material-symbols-outlined">
+                {myTransfer.direction === "outgoing" ? "north_east" : "south_west"}
+              </span>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Что делать после игры</p>
+              <p className="mt-1 text-sm text-[#c4c7c8]">
+                {myTransfer.direction === "outgoing"
+                  ? `Вам нужно передать ${formatMinorMoney(myTransfer.amountMinor, room.currency)} игроку ${myTransfer.counterpartyName}.`
+                  : `Игрок ${myTransfer.counterpartyName} передает вам ${formatMinorMoney(myTransfer.amountMinor, room.currency)}.`}
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {settlement ? null : (
-        <InfoText
-          text="Подробная инструкция по переводам здесь не сохранилась, но финальные суммы игроков доступны."
-        />
+        <InfoText text="Подробной инструкции по переводам нет, но финальные суммы игроков сохранены." />
       )}
 
       <ResultsSection
         currency={room.currency}
         currentPlayerId={room.myPlayerId}
-        description="Список отсортирован по итоговому результату от большего плюса к большему минусу."
+        description="Список отсортирован от лучшего результата к худшему."
         players={resultPlayers}
         title="Итоги игры"
       />
@@ -556,7 +632,7 @@ export function ClosedRoomResults({ data }: RoomScreenProps): JSX.Element {
       {settlement ? (
         <TransferInstructionsSection
           currency={room.currency}
-          description="Если переводы нужны, здесь видно, кому и сколько передать вручную."
+          description="Здесь видно, кому и сколько передать вручную после игры."
           transfers={settlement.transfers}
         />
       ) : null}
@@ -576,37 +652,39 @@ function ActiveRoomHeader({
   badge?: string;
 }): JSX.Element {
   return (
-    <section className={cardClassName}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-emerald-300">{title}</p>
-          <h2 className="mt-2 text-xl font-semibold">{room.title}</h2>
-          <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
+    <section className={`${cardClassName} relative overflow-hidden`}>
+      <div className="absolute right-[-2rem] top-[-2rem] h-32 w-32 rounded-full bg-[#4edea3]/10 blur-3xl" />
+      <div className="relative">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-semibold text-white">{room.title}</h2>
+            <div className="mt-2 flex items-center gap-2 text-sm text-[#c4c7c8]">
+              <span className="h-2 w-2 rounded-full bg-[#4edea3]" />
+              <span>{title}</span>
+              {room.startedAt ? (
+                <>
+                  <span className="text-white/20">•</span>
+                  <span>{formatStartedAt(room.startedAt)}</span>
+                </>
+              ) : null}
+            </div>
+            <p className="mt-3 text-sm leading-6 text-[#c4c7c8]">{description}</p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            {badge ? (
+              <span className="rounded-full border border-[#4edea3]/20 bg-[#4edea3]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4edea3]">
+                {badge}
+              </span>
+            ) : null}
+            <RoleChip role={room.myRole} />
+          </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          {badge ? (
-            <span className="rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">
-              {badge}
-            </span>
-          ) : null}
-          <RoleChip role={room.myRole} />
+
+        <div className="mt-5 grid grid-cols-3 gap-2 rounded-xl border border-white/5 bg-white/[0.03] p-3">
+          <CompactMetric label="Ребай" value={formatMinorMoney(room.rebuyAmountMinor, room.currency)} />
+          <CompactMetric label="Общий стол" value={formatMinorMoney(room.totalPotMinor, room.currency)} />
+          <CompactMetric label="Игроков" value={String(room.playersCount)} />
         </div>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-muted">
-        <Metric label="Ребай" value={formatMinorMoney(room.rebuyAmountMinor, room.currency)} />
-        <Metric label="Игроков" value={String(room.playersCount)} />
-        <Metric label="Общий стол" value={formatMinorMoney(room.totalPotMinor, room.currency)} />
-        <Metric
-          label="Старт"
-          value={
-            room.startedAt
-              ? new Intl.DateTimeFormat("ru-RU", {
-                  hour: "2-digit",
-                  minute: "2-digit"
-                }).format(new Date(room.startedAt))
-              : "Только что"
-          }
-        />
       </div>
     </section>
   );
@@ -629,88 +707,141 @@ function HistorySection({
   onCancelRebuy?: (rebuy: RebuyHistoryItemDto) => void;
   onToggle: () => void;
 }): JSX.Element {
+  const activeHistoryItems = historyState.items.filter((item) => item.status === "ACTIVE");
+  const averageAmountMinor =
+    activeHistoryItems.length > 0
+      ? (
+          activeHistoryItems.reduce((total, item) => total + BigInt(item.amountMinor), 0n) /
+          BigInt(activeHistoryItems.length)
+        ).toString()
+      : "0";
+
   return (
-    <section className={`${cardClassName} space-y-3`}>
+    <section className={cardClassName}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-base font-semibold">История ребаев</p>
-          <p className="mt-1 text-sm text-muted">
-            Здесь остаются и действующие ребаи, и отменённые записи.
-          </p>
+          <h3 className="text-lg font-semibold text-white">История ребаев</h3>
+          <p className="mt-1 text-sm text-[#c4c7c8]">Здесь остаются действующие и отмененные записи.</p>
         </div>
         <Button className={secondaryButtonClassName} onClick={onToggle}>
+          <span className="material-symbols-outlined text-[18px]">history</span>
           {isOpen ? "Скрыть" : "Открыть"}
         </Button>
       </div>
 
-      {!isOpen ? null : (
-        <div className="space-y-3">
-          {historyState.status === "loading" || historyState.status === "idle" ? (
-            <InfoText text="Подтягиваем последние записи..." />
+      {isOpen ? (
+        <>
+          {historyState.status === "ready" && historyState.items.length > 0 ? (
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Metric label="Всего ребаев" value={String(activeHistoryItems.length)} />
+              <Metric label="Средний чек" value={formatMinorMoney(averageAmountMinor, currency)} />
+            </div>
           ) : null}
 
-          {historyState.status === "error" && historyState.errorMessage ? (
-            <InfoText text={historyState.errorMessage} tone="error" />
-          ) : null}
+          <div className="mt-4 space-y-3">
+            {historyState.status === "loading" || historyState.status === "idle" ? (
+              <InfoText text="Подтягиваем последние записи..." />
+            ) : null}
 
-          {historyState.status === "ready" && historyState.items.length === 0 ? (
-            <InfoText text="История пока пустая." />
-          ) : null}
+            {historyState.status === "error" && historyState.errorMessage ? (
+              <InfoText text={historyState.errorMessage} tone="error" />
+            ) : null}
 
-          {historyState.items.map((rebuy) => (
-            <article
-              key={rebuy.id}
-              className="rounded-md border border-border bg-background/50 px-3 py-3"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground">{rebuy.playerName}</p>
-                    <StatusChip status={rebuy.status} />
+            {historyState.status === "ready" && historyState.items.length === 0 ? (
+              <InfoText text="История пока пустая." />
+            ) : null}
+
+            {historyState.items.map((rebuy) => (
+              <article
+                key={rebuy.id}
+                className={cn(
+                  rowCardClassName,
+                  rebuy.status === "CANCELLED" && "border-dashed border-rose-400/30 opacity-70"
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 gap-3">
+                    <div
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                        rebuy.status === "ACTIVE" ? "bg-[#4edea3]/10 text-[#4edea3]" : "bg-white/5 text-rose-200"
+                      )}
+                    >
+                      <span className="material-symbols-outlined text-[20px]">
+                        {rebuy.status === "ACTIVE"
+                          ? rebuy.source === "ADMIN_FOR_PLAYER"
+                            ? "admin_panel_settings"
+                            : "add_circle"
+                          : "cancel"}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-white">
+                          {getRebuyHeadline(rebuy)}
+                        </p>
+                        <StatusChip status={rebuy.status} />
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-[#8e9192]">
+                        {formatEventTime(rebuy.createdAt)}
+                      </p>
+                    </div>
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-muted">
-                    {getRebuySourceText(rebuy)} · {formatEventTime(rebuy.createdAt)}
+                  <p
+                    className={cn(
+                      "shrink-0 text-sm font-semibold",
+                      rebuy.status === "ACTIVE" ? "text-[#4edea3]" : "text-[#c4c7c8] line-through"
+                    )}
+                  >
+                    {formatMinorMoney(rebuy.amountMinor, currency)}
                   </p>
                 </div>
-                <p className="text-sm font-medium text-foreground">
-                  {formatMinorMoney(rebuy.amountMinor, currency)}
-                </p>
-              </div>
 
-              {rebuy.status === "CANCELLED" ? (
-                <p className="mt-3 text-xs leading-5 text-muted">
-                  Отменил {rebuy.cancelledByName ?? "админ"} {rebuy.cancelledAt ? `· ${formatEventTime(rebuy.cancelledAt)}` : ""}
-                  {rebuy.cancellationReason ? ` · ${rebuy.cancellationReason}` : ""}
-                </p>
-              ) : null}
+                {rebuy.status === "CANCELLED" ? (
+                  <p className="mt-3 text-xs leading-5 text-[#8e9192]">
+                    Отменил {rebuy.cancelledByName ?? "админ"}
+                    {rebuy.cancelledAt ? ` · ${formatEventTime(rebuy.cancelledAt)}` : ""}
+                    {rebuy.cancellationReason ? ` · ${rebuy.cancellationReason}` : ""}
+                  </p>
+                ) : null}
 
-              {isAdmin && rebuy.status === "ACTIVE" && onCancelRebuy ? (
-                <div className="mt-3">
-                  <Button
-                    className={`${secondaryButtonClassName} w-full`}
-                    disabled={cancellingRebuyId === rebuy.id}
-                    onClick={() => onCancelRebuy(rebuy)}
-                  >
-                    {cancellingRebuyId === rebuy.id ? "Отменяем ребай" : "Отменить ребай"}
-                  </Button>
-                </div>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      )}
+                {isAdmin && rebuy.status === "ACTIVE" && onCancelRebuy ? (
+                  <div className="mt-3">
+                    <Button
+                      className="w-full border border-rose-300/20 bg-rose-300/10 text-rose-100 hover:bg-rose-300/15"
+                      disabled={cancellingRebuyId === rebuy.id}
+                      onClick={() => onCancelRebuy(rebuy)}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">remove_circle</span>
+                      {cancellingRebuyId === rebuy.id ? "Отменяем ребай" : "Отменить ребай"}
+                    </Button>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }
 
 function PlayerRow({ player }: { player: RoomPlayerDto }): JSX.Element {
   return (
-    <article className="flex items-center justify-between rounded-md border border-border bg-background/50 px-3 py-3">
-      <div>
-        <p className="text-sm font-medium">{player.displayName}</p>
-        <p className="mt-1 text-xs text-muted">{getRoleText(player.role)}</p>
+    <article className={`${rowCardClassName} flex items-center justify-between gap-3`}>
+      <div className="flex min-w-0 items-center gap-3">
+        <PlayerAvatar name={player.displayName} />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-white">{player.displayName}</p>
+          <p className="mt-1 text-xs text-[#8e9192]">{getRoleText(player.role)}</p>
+        </div>
       </div>
-      <span className="text-xs text-muted">{getPlayerStatusText(player.status)}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-[#8e9192]">{getPlayerStatusText(player.status)}</span>
+        <span className="material-symbols-outlined text-[#4edea3]" style={{ fontVariationSettings: "'FILL' 1" }}>
+          check_circle
+        </span>
+      </div>
     </article>
   );
 }
@@ -723,18 +854,36 @@ function PlayerTotalsRow({
   currency: string;
 }): JSX.Element {
   return (
-    <article className="flex items-center justify-between rounded-md border border-border bg-background/50 px-3 py-3">
-      <div>
-        <p className="text-sm font-medium">{player.displayName}</p>
-        <p className="mt-1 text-xs text-muted">{getRoleText(player.role)}</p>
+    <article className={`${rowCardClassName} flex items-center justify-between gap-3`}>
+      <div className="flex min-w-0 items-center gap-3">
+        <PlayerAvatar name={player.displayName} />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-white">{player.displayName}</p>
+          <p className="mt-1 text-xs text-[#8e9192]">{player.rebuyCount} ребаев</p>
+        </div>
       </div>
       <div className="text-right">
-        <p className="text-sm font-medium text-foreground">
+        <p className="text-sm font-semibold text-white">
           {formatMinorMoney(player.totalBuyinMinor, currency)}
         </p>
-        <p className="mt-1 text-xs text-muted">{player.rebuyCount} ребаев</p>
+        <p className="mt-1 text-xs text-[#8e9192]">{getRoleText(player.role)}</p>
       </div>
     </article>
+  );
+}
+
+function PlayerAvatar({ name }: { name: string }): JSX.Element {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#353434] text-xs font-semibold text-[#c4c7c8]">
+      {initials || "?"}
+    </div>
   );
 }
 
@@ -742,10 +891,10 @@ function RoleChip({ role }: { role: GetRoomResponseDto["room"]["myRole"] }): JSX
   return (
     <span
       className={cn(
-        "rounded-full px-3 py-1 text-xs",
+        "rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]",
         role === "OWNER" || role === "ADMIN"
-          ? "bg-accent/20 text-accent"
-          : "bg-background text-muted"
+          ? "border border-[#4edea3]/20 bg-[#4edea3]/10 text-[#4edea3]"
+          : "border border-white/10 bg-white/[0.03] text-[#c4c7c8]"
       )}
     >
       {getRoleText(role)}
@@ -761,16 +910,18 @@ function StatusChip({
   return (
     <span
       className={cn(
-        "rounded-full px-2 py-0.5 text-[11px]",
-        status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-300" : "bg-rose-500/10 text-rose-200"
+        "rounded-full px-2 py-0.5 text-[11px] font-medium",
+        status === "ACTIVE"
+          ? "bg-[#4edea3]/10 text-[#4edea3]"
+          : "bg-rose-300/10 text-rose-200"
       )}
     >
-      {status === "ACTIVE" ? "Действует" : "Отменён"}
+      {status === "ACTIVE" ? "Действует" : "Отменен"}
     </span>
   );
 }
 
-function Metric({
+function CompactMetric({
   label,
   value
 }: {
@@ -778,9 +929,32 @@ function Metric({
   value: string;
 }): JSX.Element {
   return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
+    <div className="text-center">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8e9192]">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  tone = "default"
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "error";
+}): JSX.Element {
+  return (
+    <div className={metricCardClassName}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8e9192]">
+        {label}
+      </p>
+      <p className={cn("mt-2 text-sm font-semibold", tone === "error" ? "text-rose-200" : "text-white")}>
+        {value}
+      </p>
     </div>
   );
 }
@@ -809,40 +983,45 @@ function ResultsSection({
   });
 
   return (
-    <section className={`${cardClassName} space-y-3`}>
+    <section className={cardClassName}>
       <div>
-        <p className="text-base font-semibold">{title}</p>
-        <p className="mt-1 text-sm text-muted">{description}</p>
+        <p className="text-lg font-semibold text-white">{title}</p>
+        <p className="mt-1 text-sm text-[#c4c7c8]">{description}</p>
       </div>
-      <div className="space-y-3">
+
+      <div className="mt-4 space-y-3">
         {sortedPlayers.map((player, index) => (
           <article
             key={player.roomPlayerId}
             className={cn(
-              "rounded-md border bg-background/50 px-3 py-3",
-              player.roomPlayerId === currentPlayerId
-                ? "border-accent/50 bg-accent/5"
-                : "border-border"
+              rowCardClassName,
+              player.roomPlayerId === currentPlayerId && "border-[#4edea3]/30 bg-[#4edea3]/[0.05]"
             )}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
+            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+              <div
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full border text-sm font-semibold",
+                  index === 0
+                    ? "border-[#4edea3]/50 text-[#4edea3]"
+                    : "border-white/10 text-[#c4c7c8]"
+                )}
+              >
+                {index + 1}
+              </div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-foreground">
-                    {index + 1}. {player.displayName}
-                  </p>
+                  <p className="truncate text-sm font-semibold text-white">{player.displayName}</p>
                   {player.roomPlayerId === currentPlayerId ? (
-                    <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[11px] text-accent">
-                      Вы
-                    </span>
+                    <span className="text-[11px] font-medium text-[#4edea3]">Вы</span>
                   ) : null}
                 </div>
-                <p className="mt-2 text-xs text-muted">
-                  Закупы: {formatMinorMoney(player.totalBuyinMinor, currency)} · Финал:{" "}
+                <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-[#8e9192]">
+                  {formatMinorMoney(player.totalBuyinMinor, currency)} →{" "}
                   {formatMinorMoney(player.finalAmountMinor, currency)}
                 </p>
               </div>
-              <p className={cn("text-base font-semibold", getNetResultClass(player.netResultMinor))}>
+              <p className={cn("text-right text-lg font-semibold", getNetResultClass(player.netResultMinor))}>
                 {formatMinorMoney(player.netResultMinor, currency)}
               </p>
             </div>
@@ -863,27 +1042,35 @@ function TransferInstructionsSection({
   description: string;
 }): JSX.Element {
   return (
-    <section className={`${cardClassName} space-y-3`}>
+    <section className={cardClassName}>
       <div>
-        <p className="text-base font-semibold">Кому и сколько передать вручную</p>
-        <p className="mt-1 text-sm text-muted">{description}</p>
+        <p className="text-lg font-semibold text-white">Кто кому переводит</p>
+        <p className="mt-1 text-sm text-[#c4c7c8]">{description}</p>
       </div>
+
       {transfers.length === 0 ? (
-        <InfoText text="Расчёт сошёлся без ручных переводов." />
+        <div className="mt-4">
+          <InfoText text="Расчет сошелся без ручных переводов." tone="success" />
+        </div>
       ) : (
-        <div className="space-y-3">
+        <div className="mt-4 space-y-2">
           {transfers.map((transfer) => (
             <article
               key={`${transfer.fromRoomPlayerId}-${transfer.toRoomPlayerId}-${transfer.amountMinor}`}
-              className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/50 px-3 py-3"
+              className={`${rowCardClassName} flex items-center justify-between gap-3`}
             >
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  {transfer.fromName} передаёт {transfer.toName}
-                </p>
-                <p className="mt-1 text-xs text-muted">Инструкция после игры</p>
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-[#8e9192]">От</p>
+                  <p className="truncate text-sm font-semibold text-white">{transfer.fromName}</p>
+                </div>
+                <span className="material-symbols-outlined text-[#4edea3]">arrow_forward</span>
+                <div className="min-w-0">
+                  <p className="text-xs text-[#8e9192]">Кому</p>
+                  <p className="truncate text-sm font-semibold text-white">{transfer.toName}</p>
+                </div>
               </div>
-              <p className="text-sm font-medium text-foreground">
+              <p className="shrink-0 text-lg font-semibold text-white">
                 {formatMinorMoney(transfer.amountMinor, currency)}
               </p>
             </article>
@@ -899,15 +1086,17 @@ function InfoText({
   tone = "muted"
 }: {
   text: string;
-  tone?: "muted" | "error";
+  tone?: "muted" | "error" | "success";
 }): JSX.Element {
   return (
     <p
       className={cn(
-        "rounded-md border px-3 py-2 text-sm",
+        "rounded-[1rem] border px-3 py-3 text-sm leading-6",
         tone === "error"
-          ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
-          : "border-border bg-background/40 text-muted"
+          ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
+          : tone === "success"
+            ? "border-[#4edea3]/20 bg-[#4edea3]/10 text-[#d7ffee]"
+            : "border-white/10 bg-white/[0.03] text-[#c4c7c8]"
       )}
     >
       {text}
@@ -929,9 +1118,9 @@ function getRoleText(role: RoomPlayerDto["role"]): string {
 function getSettlementIssueText(issue: SettlementDraftPlayer["issue"]): string {
   switch (issue) {
     case "missing":
-      return "Здесь ещё не указана финальная сумма.";
+      return "Здесь еще нет финальной суммы.";
     case "invalid":
-      return "Не получилось распознать сумму. Подойдёт формат вроде 7500 или 7500,50.";
+      return "Не получилось распознать сумму. Подойдет формат вроде 7500 или 7500,50.";
     case "negative":
       return "Финальная сумма не может быть меньше нуля.";
     default:
@@ -944,18 +1133,22 @@ function getPlayerStatusText(status: RoomPlayerDto["status"]): string {
     case "LEFT":
       return "Вышел";
     case "REMOVED":
-      return "Убран из игры";
+      return "Убран";
     default:
       return "В игре";
   }
 }
 
-function getRebuySourceText(rebuy: RebuyHistoryItemDto): string {
-  if (rebuy.source === "ADMIN_FOR_PLAYER") {
-    return `Добавил ${rebuy.createdByName}`;
+function getRebuyHeadline(rebuy: RebuyHistoryItemDto): string {
+  if (rebuy.status === "CANCELLED") {
+    return "Ребай отменен";
   }
 
-  return `Добавил ${rebuy.playerName}`;
+  if (rebuy.source === "ADMIN_FOR_PLAYER") {
+    return `Админ добавил ребай для ${rebuy.playerName}`;
+  }
+
+  return `${rebuy.playerName} добавил ребай`;
 }
 
 function formatEventTime(value: string): string {
@@ -967,22 +1160,33 @@ function formatEventTime(value: string): string {
   }).format(new Date(value));
 }
 
+function formatStartedAt(value: string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function getSettlementProgress(players: SettlementDraftPlayer[]): number {
+  return players.filter((player) => player.finalAmountInput.trim() !== "" && player.issue !== "invalid").length;
+}
+
 function getNetResultClass(value: string | null): string {
   if (value === null) {
-    return "text-muted";
+    return "text-[#c4c7c8]";
   }
 
   const amount = BigInt(value);
 
   if (amount > 0n) {
-    return "text-emerald-300";
+    return "text-[#4edea3]";
   }
 
   if (amount < 0n) {
-    return "text-rose-300";
+    return "text-rose-200";
   }
 
-  return "text-foreground";
+  return "text-white";
 }
 
 function buildFallbackResults(players: RoomPlayerDto[]): SettlementPlayerResultDto[] {
@@ -1007,4 +1211,37 @@ function sumFinalAmounts(players: SettlementPlayerResultDto[]): string {
 
 function getMyNetResult(players: SettlementPlayerResultDto[], myPlayerId: string): string {
   return players.find((player) => player.roomPlayerId === myPlayerId)?.netResultMinor ?? "0";
+}
+
+function getTransferForPlayer(
+  transfers: SettlementTransferDto[],
+  myPlayerId: string
+):
+  | {
+      amountMinor: string;
+      counterpartyName: string;
+      direction: "incoming" | "outgoing";
+    }
+  | null {
+  const outgoing = transfers.find((transfer) => transfer.fromRoomPlayerId === myPlayerId);
+
+  if (outgoing) {
+    return {
+      amountMinor: outgoing.amountMinor,
+      counterpartyName: outgoing.toName,
+      direction: "outgoing"
+    };
+  }
+
+  const incoming = transfers.find((transfer) => transfer.toRoomPlayerId === myPlayerId);
+
+  if (incoming) {
+    return {
+      amountMinor: incoming.amountMinor,
+      counterpartyName: incoming.fromName,
+      direction: "incoming"
+    };
+  }
+
+  return null;
 }
