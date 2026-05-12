@@ -65,6 +65,7 @@ describe("Telegram Back Button helpers", () => {
     initializeTelegramWebApp({
       Telegram: {
         WebApp: {
+          version: "8.0",
           ready,
           expand,
           requestFullscreen,
@@ -79,11 +80,30 @@ describe("Telegram Back Button helpers", () => {
     expect(disableVerticalSwipes).toHaveBeenCalledOnce();
   });
 
+  it("does not call newer Telegram methods on older SDK versions", () => {
+    const requestFullscreen = vi.fn();
+    const disableVerticalSwipes = vi.fn();
+
+    initializeTelegramWebApp({
+      Telegram: {
+        WebApp: {
+          version: "6.0",
+          requestFullscreen,
+          disableVerticalSwipes
+        }
+      }
+    });
+
+    expect(requestFullscreen).not.toHaveBeenCalled();
+    expect(disableVerticalSwipes).not.toHaveBeenCalled();
+  });
+
   it("ignores fullscreen errors from partial Telegram SDKs", () => {
     expect(() =>
       initializeTelegramWebApp({
         Telegram: {
           WebApp: {
+            version: "8.0",
             requestFullscreen: () => {
               throw new Error("unsupported");
             },
@@ -103,6 +123,7 @@ describe("Telegram Back Button helpers", () => {
       initializeTelegramWebApp({
         Telegram: {
           WebApp: {
+            version: "8.0",
             requestFullscreen
           }
         }
@@ -123,6 +144,37 @@ describe("Telegram Back Button helpers", () => {
       onTelegramBackButtonClick(callback, {});
       offTelegramBackButtonClick(callback, {});
     }).not.toThrow();
+  });
+
+  it("does not call BackButton on unsupported SDK versions", () => {
+    const show = vi.fn();
+    const hide = vi.fn();
+    const onClick = vi.fn();
+    const offClick = vi.fn();
+    const callback = vi.fn();
+    const source = {
+      Telegram: {
+        WebApp: {
+          version: "6.0",
+          BackButton: {
+            show,
+            hide,
+            onClick,
+            offClick
+          }
+        }
+      }
+    };
+
+    showTelegramBackButton(source);
+    hideTelegramBackButton(source);
+    onTelegramBackButtonClick(callback, source);
+    offTelegramBackButtonClick(callback, source);
+
+    expect(show).not.toHaveBeenCalled();
+    expect(hide).not.toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+    expect(offClick).not.toHaveBeenCalled();
   });
 
   it("returns route fallback for Telegram back button", () => {

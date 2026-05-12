@@ -1,10 +1,12 @@
 import { getInviteCodeFromStartParam } from "@pokertable/shared";
 
 type TelegramWebApp = {
+  version?: string;
   initData?: string;
   initDataUnsafe?: {
     start_param?: string;
   };
+  isVersionAtLeast?: (version: string) => boolean;
   ready?: () => void;
   expand?: () => void;
   requestFullscreen?: () => void | Promise<void>;
@@ -64,34 +66,56 @@ export function initializeTelegramWebApp(
 
   invokeOptionalMethod(() => webApp?.ready?.());
   invokeOptionalMethod(() => webApp?.expand?.());
-  invokeOptionalMethod(() => webApp?.disableVerticalSwipes?.());
-  invokeOptionalMethod(() => webApp?.requestFullscreen?.());
+
+  if (supportsTelegramVersion(webApp, "7.7")) {
+    invokeOptionalMethod(() => webApp?.disableVerticalSwipes?.());
+  }
+
+  if (supportsTelegramVersion(webApp, "8.0")) {
+    invokeOptionalMethod(() => webApp?.requestFullscreen?.());
+  }
 }
 
 export function showTelegramBackButton(
   source: TelegramWindow | undefined = globalThis as TelegramWindow | undefined
 ): void {
-  source?.Telegram?.WebApp?.BackButton?.show();
+  const webApp = source?.Telegram?.WebApp;
+
+  if (supportsTelegramVersion(webApp, "6.1")) {
+    webApp?.BackButton?.show();
+  }
 }
 
 export function hideTelegramBackButton(
   source: TelegramWindow | undefined = globalThis as TelegramWindow | undefined
 ): void {
-  source?.Telegram?.WebApp?.BackButton?.hide();
+  const webApp = source?.Telegram?.WebApp;
+
+  if (supportsTelegramVersion(webApp, "6.1")) {
+    webApp?.BackButton?.hide();
+  }
 }
 
 export function onTelegramBackButtonClick(
   callback: () => void,
   source: TelegramWindow | undefined = globalThis as TelegramWindow | undefined
 ): void {
-  source?.Telegram?.WebApp?.BackButton?.onClick(callback);
+  const webApp = source?.Telegram?.WebApp;
+
+  if (supportsTelegramVersion(webApp, "6.1")) {
+    webApp?.BackButton?.onClick(callback);
+  }
 }
 
 export function offTelegramBackButtonClick(
   callback: () => void,
   source: TelegramWindow | undefined = globalThis as TelegramWindow | undefined
 ): void {
-  source?.Telegram?.WebApp?.BackButton?.offClick(callback);
+  const webApp = source?.Telegram?.WebApp;
+
+  if (supportsTelegramVersion(webApp, "6.1")) {
+    webApp?.BackButton?.offClick(callback);
+  }
 }
 
 export function canUseBrowserBack(
@@ -122,6 +146,42 @@ function normalizeValue(value: string | null | undefined): string | null {
   const trimmed = value.trim();
 
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function supportsTelegramVersion(
+  webApp: TelegramWebApp | undefined,
+  requiredVersion: string
+): boolean {
+  if (!webApp) {
+    return false;
+  }
+
+  if (typeof webApp.isVersionAtLeast === "function") {
+    return webApp.isVersionAtLeast(requiredVersion);
+  }
+
+  if (!webApp.version) {
+    return true;
+  }
+
+  return compareVersions(webApp.version, requiredVersion) >= 0;
+}
+
+function compareVersions(left: string, right: string): number {
+  const leftParts = left.split(".").map((part) => Number.parseInt(part, 10));
+  const rightParts = right.split(".").map((part) => Number.parseInt(part, 10));
+  const length = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] ?? 0;
+    const rightPart = rightParts[index] ?? 0;
+
+    if (leftPart !== rightPart) {
+      return leftPart - rightPart;
+    }
+  }
+
+  return 0;
 }
 
 function invokeOptionalMethod(callback: () => void | Promise<void> | undefined): void {
