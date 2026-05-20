@@ -21,7 +21,12 @@ type RoomCreateArgs = {
   data: {
     ownerUserId: string;
     title: string;
+    inviteCode: string;
+    buyInChips: bigint;
+    rebuyChips: bigint;
+    chipsPerCurrencyUnit: number;
     rebuyAmountMinor: bigint;
+    startingStack: number | null;
   };
 };
 
@@ -49,6 +54,9 @@ type SettlementCreateArgs = {
   data: {
     roomId: string;
     status: string;
+    totalBuyinsChips: bigint;
+    totalFinalAmountChips: bigint;
+    differenceChips: bigint;
     totalBuyinsMinor: bigint;
     totalFinalAmountMinor: bigint;
     differenceMinor: bigint;
@@ -61,6 +69,7 @@ type SettlementTransferCreateManyArgs = {
     settlementId: string;
     fromRoomPlayerId: string;
     toRoomPlayerId: string;
+    amountChips: bigint;
     amountMinor: bigint;
   }>;
 };
@@ -68,6 +77,7 @@ type SettlementTransferCreateManyArgs = {
 type MockPrisma = {
   room: {
     create: jest.Mock<Promise<Room>, [RoomCreateArgs]>;
+    findFirst: jest.Mock;
     findUnique: jest.Mock;
     update: jest.Mock<Promise<Room & { players: RoomPlayer[] }>, [RoomUpdateArgs]>;
   };
@@ -110,8 +120,9 @@ const baseUser: UserDto = {
 const createRoomInput: CreateRoomRequestDto = {
   title: "Покер у Дениса",
   currency: "RUB",
-  rebuyAmountMinor: "100000",
-  startingStack: 10000,
+  buyInChips: "10000",
+  rebuyChips: "10000",
+  chipsPerCurrencyUnit: "100",
   gameType: "SIMPLE_TRACKING",
   rebuyPermission: "PLAYER_SELF"
 };
@@ -124,7 +135,9 @@ describe("RoomsService", () => {
 
   it("creates a room and owner membership in one transaction", async () => {
     const prisma = createPrismaMock();
-    const room = createRoomRecord();
+    const room = createRoomRecord({
+      inviteCode: "AB12CD34"
+    });
 
     prisma.room.create.mockResolvedValue(room);
     prisma.roomPlayer.create.mockResolvedValue(createRoomPlayerRecord());
@@ -145,13 +158,45 @@ describe("RoomsService", () => {
     expect(roomCreateArgs).toBeDefined();
     expect(roomCreateArgs?.data.ownerUserId).toBe(baseUser.id);
     expect(roomCreateArgs?.data.title).toBe(createRoomInput.title);
-    expect(roomCreateArgs?.data.rebuyAmountMinor).toBe(100000n);
+    expect(roomCreateArgs?.data.rebuyAmountMinor).toBe(10000n);
+    expect(roomCreateArgs?.data.buyInChips).toBe(10000n);
+    expect(roomCreateArgs?.data.rebuyChips).toBe(10000n);
+    expect(roomCreateArgs?.data.chipsPerCurrencyUnit).toBe(100);
+    expect(roomCreateArgs?.data.startingStack).toBe(10000);
     expect(playerCreateArgs).toBeDefined();
     expect(playerCreateArgs?.data.roomId).toBe(room.id);
     expect(playerCreateArgs?.data.userId).toBe(baseUser.id);
     expect(playerCreateArgs?.data.role).toBe(RoomPlayerRole.OWNER);
     expect(playerCreateArgs?.data.status).toBe(RoomPlayerStatus.ACTIVE);
-    expect(result.room.inviteUrl).toBe(`https://miniapp.example/join/${room.inviteCode}`);
+    expect(result.room.inviteUrl).toMatch(
+      new RegExp(`^https://miniapp\\.example/join/${room.inviteCode}\\?ptb=`)
+    );
+  });
+
+  it("creates uppercase alphanumeric invite codes", async () => {
+    const prisma = createPrismaMock();
+
+    prisma.room.create.mockImplementation(({ data }: RoomCreateArgs) =>
+      Promise.resolve(
+        createRoomRecord({
+          inviteCode: data.inviteCode
+        })
+      )
+    );
+    prisma.roomPlayer.create.mockResolvedValue(createRoomPlayerRecord());
+    prisma.$transaction.mockImplementation(
+      async (
+        callback: (transaction: Pick<MockPrisma, "room" | "roomPlayer">) => Promise<Room>
+      ) => callback({ room: prisma.room, roomPlayer: prisma.roomPlayer })
+    );
+
+    const service = new RoomsService(prisma as unknown as PrismaService);
+
+    const result = await service.createRoom(baseUser, createRoomInput);
+    const roomCreateArgs = prisma.room.create.mock.calls[0]?.[0];
+
+    expect(roomCreateArgs?.data.inviteCode).toMatch(/^[A-Z0-9]{8}$/);
+    expect(result.room.inviteCode).toMatch(/^[A-Z0-9]{8}$/);
   });
 
   it("rejects too long room title", async () => {
@@ -205,14 +250,14 @@ describe("RoomsService", () => {
     await expect(
       service.createRoom(baseUser, {
         ...createRoomInput,
-        rebuyAmountMinor: "1000000001"
+        rebuyChips: "1000000001"
       })
     ).rejects.toMatchObject({
       status: HttpStatus.BAD_REQUEST,
       response: {
         error: {
           code: "ROOM_INVALID_INPUT",
-          message: "Сумма ребая слишком большая"
+          message: "Ребай слишком большой"
         }
       }
     });
@@ -227,7 +272,7 @@ describe("RoomsService", () => {
     await expect(
       service.createRoom(baseUser, {
         ...createRoomInput,
-        startingStack: 1_000_001
+        buyInChips: "1000000001"
       })
     ).rejects.toMatchObject({
       status: HttpStatus.BAD_REQUEST,
@@ -247,7 +292,7 @@ describe("RoomsService", () => {
     const room = createRoomRecord();
     const membership = createRoomPlayerRecord();
 
-    prisma.room.findUnique.mockResolvedValue(room);
+    prisma.room.findFirst.mockResolvedValue(room);
     prisma.roomPlayer.findUnique.mockResolvedValue(membership);
 
     const service = new RoomsService(prisma as unknown as PrismaService);
@@ -262,6 +307,52 @@ describe("RoomsService", () => {
       playerId: membership.id
     });
     expect(prisma.roomPlayer.create).not.toHaveBeenCalled();
+  });
+
+  it("joins room case-insensitively for lowercase and mixed stored invite codes", async () => {
+    const prisma = createPrismaMock();
+    const membership = createRoomPlayerRecord();
+    const service = new RoomsService(prisma as unknown as PrismaService);
+
+    prisma.room.findFirst
+      .mockResolvedValueOnce(
+        createRoomRecord({
+          inviteCode: "abc123xy"
+        })
+      )
+      .mockResolvedValueOnce(
+        createRoomRecord({
+          id: "room-2",
+          inviteCode: "AbC9XyZ7"
+        })
+      );
+    prisma.roomPlayer.findUnique.mockResolvedValue(membership);
+
+    const lowerStored = await service.joinRoom(baseUser, {
+      inviteCode: "ABC123XY"
+    });
+    const mixedStored = await service.joinRoom(baseUser, {
+      inviteCode: "ABC9XYZ7"
+    });
+
+    expect(lowerStored.roomId).toBe("room-1");
+    expect(mixedStored.roomId).toBe("room-2");
+    expect(prisma.room.findFirst).toHaveBeenNthCalledWith(1, {
+      where: {
+        inviteCode: {
+          equals: "ABC123XY",
+          mode: "insensitive"
+        }
+      }
+    });
+    expect(prisma.room.findFirst).toHaveBeenNthCalledWith(2, {
+      where: {
+        inviteCode: {
+          equals: "ABC9XYZ7",
+          mode: "insensitive"
+        }
+      }
+    });
   });
 
   it("returns room details with active player count and current membership metadata", async () => {
@@ -302,11 +393,13 @@ describe("RoomsService", () => {
       createRebuyRecord({
         id: "rebuy-1",
         roomPlayerId: "player-9",
+        amountChips: 10000n,
         amountMinor: 100000n
       }),
       createRebuyRecord({
         id: "rebuy-2",
         roomPlayerId: "player-2",
+        amountChips: 20000n,
         amountMinor: 200000n
       })
     ]);
@@ -316,8 +409,8 @@ describe("RoomsService", () => {
     const result = await service.getRoom(baseUser, room.id);
 
     expect(result.room.playersCount).toBe(2);
-    expect(result.room.totalPotMinor).toBe("300000");
-    expect(result.room.myBuyinsMinor).toBe("100000");
+    expect(result.room.totalPotChips).toBe("50000");
+    expect(result.room.myBuyinsChips).toBe("20000");
     expect(result.room.myRole).toBe(RoomPlayerRole.OWNER);
     expect(result.room.myPlayerId).toBe("player-9");
     expect(result.room.myPlayerStatus).toBe(RoomPlayerStatus.ACTIVE);
@@ -325,7 +418,7 @@ describe("RoomsService", () => {
     expect(result.players[0]).toMatchObject({
       id: "player-9",
       rebuyCount: 1,
-      totalBuyinMinor: "100000"
+      totalBuyinChips: "20000"
     });
     expect(result.players[2]).toMatchObject({
       id: "player-3",
@@ -340,6 +433,8 @@ describe("RoomsService", () => {
       id: "player-1",
       role: RoomPlayerRole.OWNER,
       status: RoomPlayerStatus.ACTIVE,
+      finalAmountChips: 35000n,
+      netResultChips: 15000n,
       finalAmountMinor: 350000n,
       netResultMinor: 150000n
     });
@@ -351,6 +446,8 @@ describe("RoomsService", () => {
           id: "player-1",
           role: RoomPlayerRole.OWNER,
           status: RoomPlayerStatus.ACTIVE,
+          finalAmountChips: 35000n,
+          netResultChips: 15000n,
           finalAmountMinor: 350000n,
           netResultMinor: 150000n
         }),
@@ -359,6 +456,8 @@ describe("RoomsService", () => {
           userId: "user-2",
           displayName: "Илья",
           status: RoomPlayerStatus.ACTIVE,
+          finalAmountChips: 5000n,
+          netResultChips: -15000n,
           finalAmountMinor: 50000n,
           netResultMinor: -150000n
         }),
@@ -387,11 +486,13 @@ describe("RoomsService", () => {
       createRebuyRecord({
         id: "rebuy-1",
         roomPlayerId: "player-1",
+        amountChips: 20000n,
         amountMinor: 200000n
       }),
       createRebuyRecord({
         id: "rebuy-2",
         roomPlayerId: "player-2",
+        amountChips: 20000n,
         amountMinor: 200000n
       })
     ]);
@@ -399,6 +500,9 @@ describe("RoomsService", () => {
       id: "settlement-2",
       roomId: room.id,
       status: SettlementStatus.CLOSED,
+      totalBuyinsChips: 40000n,
+      totalFinalAmountChips: 40000n,
+      differenceChips: 0n,
       totalBuyinsMinor: 400000n,
       totalFinalAmountMinor: 400000n,
       differenceMinor: 0n,
@@ -407,6 +511,7 @@ describe("RoomsService", () => {
         {
           fromRoomPlayerId: "player-2",
           toRoomPlayerId: "player-1",
+          amountChips: 15000n,
           amountMinor: 150000n,
           fromPlayer: {
             ...room.players[1],
@@ -459,24 +564,24 @@ describe("RoomsService", () => {
     expect(result.settlement).toEqual({
       id: "settlement-2",
       status: SettlementStatus.CLOSED,
-      totalBuyinsMinor: "400000",
-      totalFinalAmountMinor: "400000",
-      differenceMinor: "0",
+      totalBuyinsChips: "40000",
+      totalFinalAmountChips: "40000",
+      differenceChips: "0",
       calculatedAt: "2026-05-11T15:45:00.000Z",
       players: [
         {
           roomPlayerId: "player-1",
           displayName: "Денис",
-          totalBuyinMinor: "200000",
-          finalAmountMinor: "350000",
-          netResultMinor: "150000"
+          totalBuyinChips: "30000",
+          finalAmountChips: "35000",
+          netResultChips: "15000"
         },
         {
           roomPlayerId: "player-2",
           displayName: "Илья",
-          totalBuyinMinor: "200000",
-          finalAmountMinor: "50000",
-          netResultMinor: "-150000"
+          totalBuyinChips: "30000",
+          finalAmountChips: "5000",
+          netResultChips: "-15000"
         }
       ],
       transfers: [
@@ -485,7 +590,7 @@ describe("RoomsService", () => {
           fromName: "Илья",
           toRoomPlayerId: "player-1",
           toName: "Денис",
-          amountMinor: "150000"
+          amountChips: "15000"
         }
       ]
     });
@@ -504,6 +609,8 @@ describe("RoomsService", () => {
         {
           ...createRoomPlayerRecord({
             id: "player-1",
+            finalAmountChips: 10000n,
+            netResultChips: 0n,
             finalAmountMinor: 100000n,
             netResultMinor: 0n
           }),
@@ -548,7 +655,7 @@ describe("RoomsService", () => {
   it("rejects join for closed room", async () => {
     const prisma = createPrismaMock();
 
-    prisma.room.findUnique.mockResolvedValue(
+    prisma.room.findFirst.mockResolvedValue(
       createRoomRecord({
         status: RoomStatus.CLOSED
       })
@@ -657,6 +764,226 @@ describe("RoomsService", () => {
     expect(result.startedAt).toMatch(/T/);
   });
 
+  it("marks active player as left and stores final chips", async () => {
+    const prisma = createPrismaMock();
+    const membership = createRoomPlayerRecord({
+      id: "player-1",
+      role: RoomPlayerRole.PLAYER,
+      status: RoomPlayerStatus.ACTIVE
+    });
+    const room = createRoomRecord({
+      status: RoomStatus.RUNNING
+    });
+
+    prisma.roomPlayer.findUnique.mockResolvedValue(membership);
+    prisma.room.findUnique.mockResolvedValue(room);
+    prisma.rebuyEvent.findMany.mockResolvedValue([
+      createRebuyRecord({
+        roomPlayerId: "player-1",
+        amountChips: 5000n,
+        amountMinor: 50000n
+      })
+    ]);
+    prisma.roomPlayer.update.mockImplementation(({ where, data }: { where: { id: string }; data: Partial<RoomPlayer> }) =>
+      Promise.resolve(
+        createRoomPlayerRecord({
+          id: where.id,
+          status: data.status ?? RoomPlayerStatus.LEFT,
+          finalAmountChips: data.finalAmountChips ?? null,
+          finalAmountMinor: data.finalAmountMinor ?? null,
+          netResultChips: data.netResultChips ?? null,
+          netResultMinor: data.netResultMinor ?? null
+        })
+      )
+    );
+
+    const service = new RoomsService(prisma as unknown as PrismaService);
+    const result = await service.leaveRoom(baseUser, "room-1", {
+      finalAmountChips: "18000"
+    });
+
+    expect(prisma.roomPlayer.update).toHaveBeenCalledWith({
+      where: {
+        id: "player-1"
+      },
+      data: {
+        status: RoomPlayerStatus.LEFT,
+        finalAmountChips: 18000n,
+        finalAmountMinor: 18000n,
+        netResultChips: 3000n,
+        netResultMinor: 3000n
+      }
+    });
+    expect(result).toEqual({
+      roomId: "room-1",
+      playerId: "player-1",
+      playerStatus: RoomPlayerStatus.LEFT,
+      finalAmountChips: "18000",
+      netResultChips: "3000"
+    });
+  });
+
+  it("returns left player to the game and clears settlement fields", async () => {
+    const prisma = createPrismaMock();
+    const membership = createRoomPlayerRecord({
+      id: "player-1",
+      status: RoomPlayerStatus.LEFT,
+      finalAmountChips: 18000n,
+      netResultChips: 3000n,
+      finalAmountMinor: 18000n,
+      netResultMinor: 3000n
+    });
+
+    prisma.roomPlayer.findUnique.mockResolvedValue(membership);
+    prisma.room.findUnique.mockResolvedValue(
+      createRoomRecord({
+        status: RoomStatus.RUNNING
+      })
+    );
+    prisma.roomPlayer.update.mockImplementation(({ where, data }: { where: { id: string }; data: Partial<RoomPlayer> }) =>
+      Promise.resolve(
+        createRoomPlayerRecord({
+          id: where.id,
+          status: data.status ?? RoomPlayerStatus.ACTIVE,
+          finalAmountChips: data.finalAmountChips ?? null,
+          finalAmountMinor: data.finalAmountMinor ?? null,
+          netResultChips: data.netResultChips ?? null,
+          netResultMinor: data.netResultMinor ?? null
+        })
+      )
+    );
+
+    const service = new RoomsService(prisma as unknown as PrismaService);
+    const result = await service.returnToRoom(baseUser, "room-1");
+
+    expect(prisma.roomPlayer.update).toHaveBeenCalledWith({
+      where: {
+        id: "player-1"
+      },
+      data: {
+        status: RoomPlayerStatus.ACTIVE,
+        finalAmountChips: null,
+        finalAmountMinor: null,
+        netResultChips: null,
+        netResultMinor: null
+      }
+    });
+    expect(result).toEqual({
+      roomId: "room-1",
+      playerId: "player-1",
+      playerStatus: RoomPlayerStatus.ACTIVE,
+      finalAmountChips: null,
+      netResultChips: null
+    });
+  });
+
+  it("rejects return when player is still in the game", async () => {
+    const prisma = createPrismaMock();
+
+    prisma.roomPlayer.findUnique.mockResolvedValue(
+      createRoomPlayerRecord({
+        status: RoomPlayerStatus.ACTIVE
+      })
+    );
+    prisma.room.findUnique.mockResolvedValue(
+      createRoomRecord({
+        status: RoomStatus.RUNNING
+      })
+    );
+
+    const service = new RoomsService(prisma as unknown as PrismaService);
+
+    await expect(service.returnToRoom(baseUser, "room-1")).rejects.toMatchObject({
+      status: HttpStatus.CONFLICT,
+      response: {
+        error: {
+          code: "ROOM_INVALID_STATUS"
+        }
+      }
+    });
+    expect(prisma.roomPlayer.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects leave for non-member", async () => {
+    const prisma = createPrismaMock();
+
+    prisma.roomPlayer.findUnique.mockResolvedValue(null);
+
+    const service = new RoomsService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.leaveRoom(baseUser, "room-1", {
+        finalAmountChips: "10000"
+      })
+    ).rejects.toMatchObject({
+      status: HttpStatus.FORBIDDEN,
+      response: {
+        error: {
+          code: "ROOM_ACCESS_DENIED"
+        }
+      }
+    });
+  });
+
+  it("rejects leave when player already left", async () => {
+    const prisma = createPrismaMock();
+
+    prisma.roomPlayer.findUnique.mockResolvedValue(
+      createRoomPlayerRecord({
+        status: RoomPlayerStatus.LEFT
+      })
+    );
+    prisma.room.findUnique.mockResolvedValue(
+      createRoomRecord({
+        status: RoomStatus.RUNNING
+      })
+    );
+
+    const service = new RoomsService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.leaveRoom(baseUser, "room-1", {
+        finalAmountChips: "10000"
+      })
+    ).rejects.toMatchObject({
+      status: HttpStatus.CONFLICT,
+      response: {
+        error: {
+          code: "ROOM_INVALID_STATUS"
+        }
+      }
+    });
+    expect(prisma.roomPlayer.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects leave with invalid final chips", async () => {
+    const prisma = createPrismaMock();
+
+    prisma.roomPlayer.findUnique.mockResolvedValue(createRoomPlayerRecord());
+    prisma.room.findUnique.mockResolvedValue(
+      createRoomRecord({
+        status: RoomStatus.RUNNING
+      })
+    );
+
+    const service = new RoomsService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.leaveRoom(baseUser, "room-1", {
+        finalAmountChips: "-1"
+      })
+    ).rejects.toMatchObject({
+      status: HttpStatus.BAD_REQUEST,
+      response: {
+        error: {
+          code: "ROOM_INVALID_INPUT",
+          message: "Сколько фишек у вас осталось?"
+        }
+      }
+    });
+    expect(prisma.roomPlayer.update).not.toHaveBeenCalled();
+  });
+
   it("does not let a regular player add self rebuy when admin should do it", async () => {
     const prisma = createPrismaMock();
     const membership = createRoomPlayerRecord({
@@ -732,6 +1059,51 @@ describe("RoomsService", () => {
     });
   });
 
+  it("does not let admin add rebuy for player who left the game", async () => {
+    const prisma = createPrismaMock();
+    const membership = createRoomPlayerRecord({
+      id: "player-admin",
+      role: RoomPlayerRole.OWNER,
+      status: RoomPlayerStatus.ACTIVE
+    });
+
+    prisma.$transaction.mockImplementation(async (callback: (transaction: MockPrisma) => Promise<unknown>) =>
+      callback(prisma)
+    );
+    prisma.roomPlayer.findUnique
+      .mockResolvedValueOnce(membership)
+      .mockResolvedValueOnce(
+        createRoomPlayerRecord({
+          id: "player-left",
+          userId: "user-2",
+          status: RoomPlayerStatus.LEFT
+        })
+      );
+    prisma.room.findUnique.mockResolvedValue(
+      createRoomRecord({
+        status: RoomStatus.RUNNING
+      })
+    );
+
+    const service = new RoomsService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.createRebuy(baseUser, "room-1", {
+        roomPlayerId: "player-left",
+        idempotencyKey: "rebuy-left-player"
+      })
+    ).rejects.toMatchObject({
+      status: HttpStatus.CONFLICT,
+      response: {
+        error: {
+          code: "REBUY_PLAYER_UNAVAILABLE",
+          message: "Ребай можно добавить только игроку за столом"
+        }
+      }
+    });
+    expect(prisma.rebuyEvent.create).not.toHaveBeenCalled();
+  });
+
   it("excludes cancelled rebuy events from room totals", async () => {
     const prisma = createPrismaMock();
 
@@ -765,6 +1137,7 @@ describe("RoomsService", () => {
               createRebuyRecord({
                 id: "rebuy-active",
                 roomPlayerId: "player-1",
+                amountChips: 10000n,
                 amountMinor: 100000n,
                 status: RebuyEventStatus.ACTIVE
               })
@@ -773,12 +1146,14 @@ describe("RoomsService", () => {
               createRebuyRecord({
                 id: "rebuy-active",
                 roomPlayerId: "player-1",
+                amountChips: 10000n,
                 amountMinor: 100000n,
                 status: RebuyEventStatus.ACTIVE
               }),
               createRebuyRecord({
                 id: "rebuy-cancelled",
                 roomPlayerId: "player-2",
+                amountChips: 10000n,
                 amountMinor: 100000n,
                 status: RebuyEventStatus.CANCELLED,
                 cancelledAt: new Date("2026-05-11T13:05:00.000Z"),
@@ -791,16 +1166,16 @@ describe("RoomsService", () => {
     const service = new RoomsService(prisma as unknown as PrismaService);
     const result = await service.getRoom(baseUser, "room-1");
 
-    expect(result.room.totalPotMinor).toBe("100000");
+    expect(result.room.totalPotChips).toBe("30000");
     expect(result.players[0]).toMatchObject({
       id: "player-1",
       rebuyCount: 1,
-      totalBuyinMinor: "100000"
+      totalBuyinChips: "20000"
     });
     expect(result.players[1]).toMatchObject({
       id: "player-2",
       rebuyCount: 0,
-      totalBuyinMinor: "0"
+      totalBuyinChips: "10000"
     });
   });
 
@@ -853,7 +1228,18 @@ describe("RoomsService", () => {
       createRebuyRecord({
         id: "rebuy-1",
         roomPlayerId: "player-1",
+        amountChips: 10000n,
         amountMinor: 100000n
+      })
+    ]);
+    prisma.roomPlayer.findMany.mockResolvedValue([
+      createRoomPlayerRecord({
+        id: "player-1",
+        role: RoomPlayerRole.PLAYER
+      }),
+      createRoomPlayerRecord({
+        id: "player-2",
+        userId: "user-2"
       })
     ]);
     prisma.idempotencyKey.update.mockImplementation(
@@ -938,7 +1324,7 @@ describe("RoomsService", () => {
     ]);
   });
 
-  it("builds settlement preview from active players and excludes cancelled rebuys", async () => {
+  it("builds settlement preview from active and left players and excludes removed players", async () => {
     const prisma = createPrismaMock();
 
     prisma.roomPlayer.findUnique.mockResolvedValue(
@@ -952,17 +1338,30 @@ describe("RoomsService", () => {
         status: RoomStatus.RUNNING
       })
     );
-    prisma.roomPlayer.findMany.mockResolvedValue([
-      createRoomPlayerRecord({
-        id: "player-1",
-        role: RoomPlayerRole.OWNER
-      }),
-      createRoomPlayerRecord({
-        id: "player-2",
-        userId: "user-2",
-        displayName: "Илья"
-      })
-    ]);
+    prisma.roomPlayer.findMany.mockImplementation(({ where }: { where?: { status?: { in?: RoomPlayerStatus[] } } }) =>
+      Promise.resolve(
+        [
+          createRoomPlayerRecord({
+            id: "player-1",
+            role: RoomPlayerRole.OWNER
+          }),
+          createRoomPlayerRecord({
+            id: "player-2",
+            userId: "user-2",
+            displayName: "Илья",
+            status: RoomPlayerStatus.LEFT
+          }),
+          createRoomPlayerRecord({
+            id: "player-3",
+            userId: "user-3",
+            displayName: "Саша",
+            status: RoomPlayerStatus.REMOVED
+          })
+        ].filter((player) =>
+          where?.status?.in ? where.status.in.includes(player.status) : true
+        )
+      )
+    );
     prisma.rebuyEvent.findMany.mockImplementation(({ where }: { where?: { status?: RebuyEventStatus } }) =>
       Promise.resolve(
         where?.status === RebuyEventStatus.ACTIVE
@@ -970,12 +1369,14 @@ describe("RoomsService", () => {
               createRebuyRecord({
                 id: "rebuy-active-1",
                 roomPlayerId: "player-1",
+                amountChips: 10000n,
                 amountMinor: 100000n,
                 status: RebuyEventStatus.ACTIVE
               }),
               createRebuyRecord({
                 id: "rebuy-active-2",
                 roomPlayerId: "player-2",
+                amountChips: 20000n,
                 amountMinor: 200000n,
                 status: RebuyEventStatus.ACTIVE
               })
@@ -989,44 +1390,36 @@ describe("RoomsService", () => {
       finalAmounts: [
         {
           roomPlayerId: "player-1",
-          finalAmountMinor: "150000"
+          finalAmountChips: "15000"
         },
         {
           roomPlayerId: "player-2",
-          finalAmountMinor: "150000"
+          finalAmountChips: "15000"
         }
       ]
     });
 
     expect(result).toEqual({
-      totalBuyinsMinor: "300000",
-      totalFinalAmountMinor: "300000",
-      differenceMinor: "0",
+      totalBuyinsChips: "50000",
+      totalFinalAmountChips: "30000",
+      differenceChips: "-20000",
       players: [
         {
           roomPlayerId: "player-1",
           displayName: "Денис",
-          totalBuyinMinor: "100000",
-          finalAmountMinor: "150000",
-          netResultMinor: "50000"
+          totalBuyinChips: "20000",
+          finalAmountChips: "15000",
+          netResultChips: "-5000"
         },
         {
           roomPlayerId: "player-2",
           displayName: "Илья",
-          totalBuyinMinor: "200000",
-          finalAmountMinor: "150000",
-          netResultMinor: "-50000"
+          totalBuyinChips: "30000",
+          finalAmountChips: "15000",
+          netResultChips: "-15000"
         }
       ],
-      transfers: [
-        {
-          fromRoomPlayerId: "player-2",
-          fromName: "Илья",
-          toRoomPlayerId: "player-1",
-          toName: "Денис",
-          amountMinor: "50000"
-        }
-      ]
+      transfers: []
     });
   });
 
@@ -1062,11 +1455,13 @@ describe("RoomsService", () => {
       createRebuyRecord({
         id: "rebuy-active-1",
         roomPlayerId: "player-1",
+        amountChips: 10000n,
         amountMinor: 100000n
       }),
       createRebuyRecord({
         id: "rebuy-active-2",
         roomPlayerId: "player-2",
+        amountChips: 20000n,
         amountMinor: 200000n
       })
     ]);
@@ -1090,11 +1485,11 @@ describe("RoomsService", () => {
       finalAmounts: [
         {
           roomPlayerId: "player-1",
-          finalAmountMinor: "150000"
+          finalAmountChips: "20000"
         },
         {
           roomPlayerId: "player-2",
-          finalAmountMinor: "150000"
+          finalAmountChips: "30000"
         }
       ]
     });
@@ -1107,8 +1502,10 @@ describe("RoomsService", () => {
           id: "player-1"
         },
         data: {
-          finalAmountMinor: 150000n,
-          netResultMinor: 50000n
+          finalAmountChips: 20000n,
+          netResultChips: 0n,
+          finalAmountMinor: 20000n,
+          netResultMinor: 0n
         }
       })
     );
@@ -1119,8 +1516,10 @@ describe("RoomsService", () => {
           id: "player-2"
         },
         data: {
-          finalAmountMinor: 150000n,
-          netResultMinor: -50000n
+          finalAmountChips: 30000n,
+          netResultChips: 0n,
+          finalAmountMinor: 30000n,
+          netResultMinor: 0n
         }
       })
     );
@@ -1130,21 +1529,15 @@ describe("RoomsService", () => {
     expect(settlementCreateArgs?.data).toEqual({
       roomId: "room-1",
       status: "CLOSED",
-      totalBuyinsMinor: 300000n,
-      totalFinalAmountMinor: 300000n,
+      totalBuyinsChips: 50000n,
+      totalFinalAmountChips: 50000n,
+      differenceChips: 0n,
+      totalBuyinsMinor: 50000n,
+      totalFinalAmountMinor: 50000n,
       differenceMinor: 0n,
       closedByUserId: baseUser.id
     });
-    expect(prisma.settlementTransfer.createMany).toHaveBeenCalledWith({
-      data: [
-        {
-          settlementId: "settlement-1",
-          fromRoomPlayerId: "player-2",
-          toRoomPlayerId: "player-1",
-          amountMinor: 50000n
-        }
-      ]
-    });
+    expect(prisma.settlementTransfer.createMany).not.toHaveBeenCalled();
     const roomUpdateArgs = prisma.room.update.mock.calls[0]?.[0];
 
     expect(roomUpdateArgs).toBeDefined();
@@ -1192,10 +1585,12 @@ describe("RoomsService", () => {
     prisma.rebuyEvent.findMany.mockResolvedValue([
       createRebuyRecord({
         roomPlayerId: "player-1",
+        amountChips: 10000n,
         amountMinor: 100000n
       }),
       createRebuyRecord({
         roomPlayerId: "player-2",
+        amountChips: 20000n,
         amountMinor: 200000n
       })
     ]);
@@ -1220,11 +1615,11 @@ describe("RoomsService", () => {
       finalAmounts: [
         {
           roomPlayerId: "player-1",
-          finalAmountMinor: "150000"
+          finalAmountChips: "20000"
         },
         {
           roomPlayerId: "player-2",
-          finalAmountMinor: "150000"
+          finalAmountChips: "30000"
         }
       ]
     });
@@ -1254,7 +1649,7 @@ describe("RoomsService", () => {
         finalAmounts: [
           {
             roomPlayerId: "player-1",
-            finalAmountMinor: "100000"
+            finalAmountChips: "10000"
           }
         ]
       })
@@ -1315,11 +1710,11 @@ describe("RoomsService", () => {
         finalAmounts: [
           {
             roomPlayerId: "player-1",
-            finalAmountMinor: "100000"
+            finalAmountChips: "10000"
           },
           {
             roomPlayerId: "player-2",
-            finalAmountMinor: "150000"
+            finalAmountChips: "15000"
           }
         ]
       })
@@ -1369,7 +1764,7 @@ describe("RoomsService", () => {
         finalAmounts: [
           {
             roomPlayerId: "player-1",
-            finalAmountMinor: "100000"
+            finalAmountChips: "10000"
           }
         ]
       })
@@ -1412,11 +1807,11 @@ describe("RoomsService", () => {
         finalAmounts: [
           {
             roomPlayerId: "player-1",
-            finalAmountMinor: "100000"
+            finalAmountChips: "10000"
           },
           {
             roomPlayerId: "player-1",
-            finalAmountMinor: "100000"
+            finalAmountChips: "10000"
           }
         ]
       })
@@ -1459,7 +1854,7 @@ describe("RoomsService", () => {
         finalAmounts: [
           {
             roomPlayerId: "player-999",
-            finalAmountMinor: "100000"
+            finalAmountChips: "10000"
           }
         ]
       })
@@ -1499,7 +1894,7 @@ describe("RoomsService", () => {
         finalAmounts: [
           {
             roomPlayerId: "player-1",
-            finalAmountMinor: "100000"
+            finalAmountChips: "10000"
           }
         ]
       })
@@ -1576,7 +1971,7 @@ describe("RoomsService", () => {
     const prisma = createPrismaMock();
     const room = createRoomRecord();
 
-    prisma.room.findUnique.mockResolvedValue(room);
+    prisma.room.findFirst.mockResolvedValue(room);
     prisma.roomPlayer.findUnique.mockResolvedValue(
       createRoomPlayerRecord({
         status: RoomPlayerStatus.REMOVED
@@ -1597,6 +1992,7 @@ function createPrismaMock(): MockPrisma {
   return {
     room: {
       create: jest.fn<Promise<Room>, [RoomCreateArgs]>(),
+      findFirst: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn<Promise<Room & { players: RoomPlayer[] }>, [RoomUpdateArgs]>()
     },
@@ -1610,11 +2006,12 @@ function createPrismaMock(): MockPrisma {
       create: jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve(
           createRebuyRecord({
-          roomId: data.roomId as string,
-          roomPlayerId: data.roomPlayerId as string,
-          amountMinor: data.amountMinor as bigint,
-          createdByUserId: data.createdByUserId as string,
-          source: data.source as RebuyEventSource
+            roomId: data.roomId as string,
+            roomPlayerId: data.roomPlayerId as string,
+            amountChips: data.amountChips as bigint,
+            amountMinor: data.amountMinor as bigint,
+            createdByUserId: data.createdByUserId as string,
+            source: data.source as RebuyEventSource
           })
         )
       ),
@@ -1632,8 +2029,8 @@ function createPrismaMock(): MockPrisma {
       createMany: jest
         .fn<Promise<{ count: number }>, [SettlementTransferCreateManyArgs]>()
         .mockResolvedValue({
-        count: 0
-      })
+          count: 0
+        })
     },
     idempotencyKey: {
       create: jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) =>
@@ -1692,6 +2089,9 @@ function createRoomRecord(
     ownerUserId: baseUser.id,
     title: "Покер у Дениса",
     currency: "RUB",
+    buyInChips: 10000n,
+    rebuyChips: 10000n,
+    chipsPerCurrencyUnit: 100,
     rebuyAmountMinor: 100000n,
     startingStack: 10000,
     gameType: "SIMPLE_TRACKING",
@@ -1719,6 +2119,8 @@ function createRoomPlayerRecord(overrides: Partial<RoomPlayer> = {}): RoomPlayer
     status: RoomPlayerStatus.ACTIVE,
     joinedAt: new Date("2026-05-11T12:01:00.000Z"),
     removedAt: null,
+    finalAmountChips: null,
+    netResultChips: null,
     finalAmountMinor: null,
     netResultMinor: null,
     ...overrides
@@ -1744,6 +2146,7 @@ function createRebuyRecord(
     id: string;
     roomId: string;
     roomPlayerId: string;
+    amountChips: bigint;
     amountMinor: bigint;
     createdByUserId: string;
     source: RebuyEventSource;
@@ -1758,6 +2161,7 @@ function createRebuyRecord(
     id: "rebuy-1",
     roomId: "room-1",
     roomPlayerId: "player-1",
+    amountChips: 10000n,
     amountMinor: 100000n,
     createdByUserId: baseUser.id,
     source: RebuyEventSource.PLAYER_SELF,

@@ -1,47 +1,56 @@
-import type { RoomPlayerDto, SettlementPreviewRequestDto } from "@pokertable/shared";
-import { formatMinorMoney, parseMajorMoneyToMinor } from "@pokertable/shared";
-import { getActivePlayers } from "./room-view";
+import type { RoomPlayerDto } from "@pokertable/shared";
+import { getSettlementPlayers } from "./room-view";
 
 export type SettlementInputIssue = "missing" | "invalid" | "negative";
 
 export type SettlementDraftPlayer = {
   roomPlayerId: string;
   displayName: string;
-  totalBuyinMinor: string;
+  status: RoomPlayerDto["status"];
+  totalBuyinChips: string;
   finalAmountInput: string;
-  finalAmountMinor: string | null;
-  netResultMinor: string | null;
+  finalAmountChips: string | null;
+  netResultChips: string | null;
   issue: SettlementInputIssue | null;
 };
 
 export type SettlementDraftSummary = {
-  totalBuyinsMinor: string;
-  totalFinalAmountMinor: string;
-  differenceMinor: string;
+  totalBuyinsChips: string;
+  totalFinalAmountChips: string;
+  differenceChips: string;
   hasMissingValues: boolean;
   hasInvalidValues: boolean;
   isBalanced: boolean;
+};
+
+export type SettlementPreviewPayload = {
+  finalAmounts: Array<{
+    roomPlayerId: string;
+    finalAmountChips: string;
+  }>;
 };
 
 export function getSettlementDraftPlayers(
   players: RoomPlayerDto[],
   values: Record<string, string>
 ): SettlementDraftPlayer[] {
-  return getActivePlayers(players).map((player) => {
-    const finalAmountInput = values[player.id] ?? getInitialFinalAmountInput(player.finalAmountMinor);
+  return getSettlementPlayers(players).map((player) => {
+    const totalBuyinChips = getPlayerTotalBuyinChips(player);
+    const finalAmountInput = values[player.id] ?? getInitialFinalAmountInput(getPlayerFinalAmountChips(player));
     const parsedInput = parseSettlementInput(finalAmountInput);
-    const netResultMinor =
-      parsedInput.finalAmountMinor === null
+    const netResultChips =
+      parsedInput.finalAmountChips === null
         ? null
-        : (BigInt(parsedInput.finalAmountMinor) - BigInt(player.totalBuyinMinor)).toString();
+        : (BigInt(parsedInput.finalAmountChips) - BigInt(totalBuyinChips)).toString();
 
     return {
       roomPlayerId: player.id,
       displayName: player.displayName,
-      totalBuyinMinor: player.totalBuyinMinor,
+      status: player.status,
+      totalBuyinChips,
       finalAmountInput,
-      finalAmountMinor: parsedInput.finalAmountMinor,
-      netResultMinor,
+      finalAmountChips: parsedInput.finalAmountChips,
+      netResultChips,
       issue: parsedInput.issue
     };
   });
@@ -50,16 +59,16 @@ export function getSettlementDraftPlayers(
 export function getSettlementDraftSummary(
   players: SettlementDraftPlayer[]
 ): SettlementDraftSummary {
-  let totalBuyinsMinor = 0n;
-  let totalFinalAmountMinor = 0n;
+  let totalBuyinsChips = 0n;
+  let totalFinalAmountChips = 0n;
   let hasMissingValues = false;
   let hasInvalidValues = false;
 
   for (const player of players) {
-    totalBuyinsMinor += BigInt(player.totalBuyinMinor);
+    totalBuyinsChips += BigInt(player.totalBuyinChips);
 
-    if (player.finalAmountMinor !== null) {
-      totalFinalAmountMinor += BigInt(player.finalAmountMinor);
+    if (player.finalAmountChips !== null) {
+      totalFinalAmountChips += BigInt(player.finalAmountChips);
     }
 
     if (player.issue === "missing") {
@@ -71,35 +80,35 @@ export function getSettlementDraftSummary(
     }
   }
 
-  const differenceMinor = (totalFinalAmountMinor - totalBuyinsMinor).toString();
+  const differenceChips = (totalFinalAmountChips - totalBuyinsChips).toString();
 
   return {
-    totalBuyinsMinor: totalBuyinsMinor.toString(),
-    totalFinalAmountMinor: totalFinalAmountMinor.toString(),
-    differenceMinor,
+    totalBuyinsChips: totalBuyinsChips.toString(),
+    totalFinalAmountChips: totalFinalAmountChips.toString(),
+    differenceChips,
     hasMissingValues,
     hasInvalidValues,
-    isBalanced: differenceMinor === "0"
+    isBalanced: differenceChips === "0"
   };
 }
 
 export function buildSettlementPreviewPayload(
   players: SettlementDraftPlayer[]
-): SettlementPreviewRequestDto | null {
+): SettlementPreviewPayload | null {
   if (players.length === 0) {
     return null;
   }
 
-  const finalAmounts: SettlementPreviewRequestDto["finalAmounts"] = [];
+  const finalAmounts: SettlementPreviewPayload["finalAmounts"] = [];
 
   for (const player of players) {
-    if (player.finalAmountMinor === null) {
+    if (player.finalAmountChips === null) {
       return null;
     }
 
     finalAmounts.push({
       roomPlayerId: player.roomPlayerId,
-      finalAmountMinor: player.finalAmountMinor
+      finalAmountChips: player.finalAmountChips
     });
   }
 
@@ -116,84 +125,73 @@ export function getSettlementDraftKey(players: SettlementDraftPlayer[]): string 
   }
 
   return players
-    .map((player) => `${player.roomPlayerId}:${player.totalBuyinMinor}:${player.finalAmountMinor}`)
+    .map((player) => `${player.roomPlayerId}:${player.totalBuyinChips}:${player.finalAmountChips}`)
     .join("|");
 }
 
 export function getSettlementDifferenceMessage(
-  differenceMinor: string,
-  currency: string
+  differenceChips: string
 ): string | null {
-  const difference = BigInt(differenceMinor);
+  const difference = BigInt(differenceChips);
 
   if (difference === 0n) {
     return null;
   }
 
-  const absoluteDifference = (difference < 0n ? difference * -1n : difference).toString();
-  const amountText = formatMinorMoney(absoluteDifference, currency);
+  const amountText = formatChipAmount(difference < 0n ? difference * -1n : difference);
 
   if (difference > 0n) {
-    return `Финальных сумм получилось больше на ${amountText}. Проверьте ввод.`;
+    return `Финальных фишек получилось больше на ${amountText}. Проверьте ввод.`;
   }
 
-  return `Финальных сумм пока меньше на ${amountText}. Проверьте ввод.`;
+  return `Финальных фишек пока меньше на ${amountText}. Проверьте ввод.`;
 }
 
 export function getInitialFinalAmountInput(value: string | null): string {
-  if (!value) {
-    return "";
-  }
-
-  return formatMinorAmountInput(value);
+  return value ?? "";
 }
 
 function parseSettlementInput(value: string): {
-  finalAmountMinor: string | null;
+  finalAmountChips: string | null;
   issue: SettlementInputIssue | null;
 } {
   const trimmed = value.trim();
 
   if (trimmed.length === 0) {
     return {
-      finalAmountMinor: null,
+      finalAmountChips: null,
       issue: "missing"
     };
   }
 
-  const finalAmountMinor = parseMajorMoneyToMinor(trimmed);
-
-  if (finalAmountMinor === null) {
+  if (!/^-?\d+$/.test(trimmed)) {
     return {
-      finalAmountMinor: null,
+      finalAmountChips: null,
       issue: "invalid"
     };
   }
 
-  if (finalAmountMinor.startsWith("-")) {
+  if (trimmed.startsWith("-")) {
     return {
-      finalAmountMinor: null,
+      finalAmountChips: null,
       issue: "negative"
     };
   }
 
   return {
-    finalAmountMinor,
+    finalAmountChips: trimmed,
     issue: null
   };
 }
 
-function formatMinorAmountInput(minor: string): string {
-  const amount = BigInt(minor);
-  const isNegative = amount < 0n;
-  const absolute = isNegative ? amount * -1n : amount;
-  const units = absolute / 100n;
-  const remainder = absolute % 100n;
-  const prefix = isNegative ? "-" : "";
+function getPlayerTotalBuyinChips(player: RoomPlayerDto): string {
+  return player.totalBuyinChips;
+}
 
-  if (remainder === 0n) {
-    return `${prefix}${units.toString()}`;
-  }
+function getPlayerFinalAmountChips(player: RoomPlayerDto): string | null {
+  return player.finalAmountChips;
+}
 
-  return `${prefix}${units.toString()},${remainder.toString().padStart(2, "0")}`;
+function formatChipAmount(value: bigint): string {
+  return `${new Intl.NumberFormat("ru-RU").format(Number(value)).replace(/\u00A0/g, " ")} фишек`;
 }

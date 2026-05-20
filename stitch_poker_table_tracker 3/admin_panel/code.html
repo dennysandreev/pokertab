@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "secondary": "#4edea3",
+            "inverse-surface": "#e5e2e1",
+            "inverse-on-surface": "#313030",
+            "tertiary": "#ffffff",
+            "on-tertiary-container": "#636565",
+            "surface-container": "#201f1f",
+            "secondary-fixed-dim": "#4edea3",
+            "surface-container-high": "#2a2a2a",
+            "tertiary-fixed": "#e2e2e2",
+            "error-container": "#93000a",
+            "on-secondary": "#003824",
+            "surface-container-lowest": "#0e0e0e",
+            "primary-fixed": "#e2e2e2",
+            "on-secondary-fixed-variant": "#005236",
+            "on-secondary-container": "#00311f",
+            "surface-tint": "#c6c6c7",
+            "surface-container-low": "#1c1b1b",
+            "primary-fixed-dim": "#c6c6c7",
+            "on-tertiary": "#2f3131",
+            "on-background": "#e5e2e1",
+            "on-primary-container": "#636565",
+            "secondary-fixed": "#6ffbbe",
+            "secondary-container": "#00a572",
+            "on-surface-variant": "#c4c7c8",
+            "on-secondary-fixed": "#002113",
+            "on-surface": "#e5e2e1",
+            "tertiary-container": "#e2e2e2",
+            "surface-container-highest": "#353434",
+            "on-primary-fixed": "#1a1c1c",
+            "background": "#141313",
+            "surface-variant": "#353434",
+            "primary": "#ffffff",
+            "error": "#ffb4ab",
+            "surface-dim": "#141313",
+            "outline": "#8e9192",
+            "on-primary-fixed-variant": "#454747",
+            "on-tertiary-fixed": "#1a1c1c",
+            "on-error-container": "#ffdad6",
+            "outline-variant": "#444748",
+            "on-error": "#690005",
+            "tertiary-fixed-dim": "#c6c6c7",
+            "on-primary": "#2f3131",
+            "primary-container": "#e2e2e2",
+            "surface": "#141313",
+            "on-tertiary-fixed-variant": "#454747",
+            "surface-bright": "#3a3939",
+            "inverse-primary": "#5d5f5f"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "xs": "8px",
+            "md": "16px",
+            "xl": "32px",
+            "sm": "12px",
+            "safe-area-inset": "16px",
+            "lg": "24px",
+            "base": "4px"
+          },
+          "fontFamily": {
+            "label-caps": ["Inter"],
+            "display-lg": ["Hanken Grotesk"],
+            "body-sm": ["Inter"],
+            "title-sm": ["Inter"],
+            "headline-md": ["Hanken Grotesk"],
+            "body-md": ["Inter"]
+          },
+          "fontSize": {
+            "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+            "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+            "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+            "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+            "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+            "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      line-height: 1;
+      text-transform: none;
+      letter-spacing: normal;
+      word-wrap: normal;
+      white-space: nowrap;
+      direction: ltr;
+    }
+    .glass-card {
+      background: rgba(26, 26, 26, 0.8);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface min-h-screen pb-32">
+<!-- Admin Mode Banner -->
+<div class="fixed top-12 left-0 w-full z-[60] bg-secondary-container/20 backdrop-blur-md border-y border-secondary/20 py-1 flex items-center justify-center gap-xs">
+<span class="material-symbols-outlined text-secondary text-[16px]" data-icon="admin_panel_settings">admin_panel_settings</span>
+<span class="font-label-caps text-label-caps text-secondary uppercase tracking-widest">Admin Mode Active</span>
+</div>
+<!-- TopAppBar Component -->
+<header class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-md h-12 bg-surface/80 backdrop-blur-md border-b border-white/10">
+<div class="flex items-center gap-xs">
+<div class="w-8 h-8 rounded-full overflow-hidden border border-white/10 bg-surface-container-high">
+<img alt="Admin" data-alt="A professional high-resolution avatar of a serious male poker administrator with short dark hair, wearing a modern charcoal suit. The aesthetic is clean and minimalist, set against a deep grey background with soft cinematic lighting that highlights subtle facial features. The overall style is sophisticated and analytical, matching a high-end fintech and gaming application interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIMAuHNX-jVagU8jSC4e8Rv_E3vVM1P1cdQHHV4BgU-lhhk12r7yGQgRrgKp96nB3OwO4EX7x4q_xOx8NU857C--hWjGw_6fFwFxwL9kamTEvtTZ5qCBuMbDnVFSsZVqa5Y8hcD0zr6AcAAwq0fpC1ybbbcNBR_kpdFJC9Zjyg0oCAQ7wtiR88_j0TnXunUlV5KmcJ-1XoK7gmA7WmWz_sSHvRcYJxLm_Is1W2e0OhV44O7OJdRyucVFZCz6ZDAcCvxB1Y4e5YruM"/>
+</div>
+<h1 class="font-headline-md text-headline-md-mobile font-bold text-on-surface">Poker Table</h1>
+</div>
+<div class="flex items-center gap-sm">
+<button class="material-symbols-outlined text-on-surface-variant hover:bg-surface-container-high transition-colors p-2 rounded-full active:scale-95 transition-transform duration-200" data-icon="settings">settings</button>
+</div>
+</header>
+<main class="pt-24 px-md space-y-lg">
+<!-- Table Performance Bento Grid -->
+<section class="grid grid-cols-2 gap-sm">
+<div class="glass-card p-md rounded-xl col-span-2 flex justify-between items-center">
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">TOTAL POT</p>
+<h2 class="font-display-lg text-display-lg text-secondary">1,200</h2>
+</div>
+<div class="text-right">
+<p class="font-label-caps text-label-caps text-on-surface-variant">HAND #</p>
+<h2 class="font-display-lg text-display-lg text-primary">24</h2>
+</div>
+</div>
+<div class="glass-card p-md rounded-xl flex flex-col justify-between h-24">
+<p class="font-label-caps text-label-caps text-on-surface-variant">ACTIVE PLAYERS</p>
+<div class="flex items-end gap-xs">
+<span class="font-headline-md text-headline-md text-primary">9</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant pb-1">/ 10</span>
+</div>
+</div>
+<div class="glass-card p-md rounded-xl flex flex-col justify-between h-24">
+<p class="font-label-caps text-label-caps text-on-surface-variant">BLINDS</p>
+<div class="flex items-end gap-xs">
+<span class="font-headline-md text-headline-md text-primary">10/20</span>
+<span class="font-label-caps text-label-caps text-secondary pb-1">USD</span>
+</div>
+</div>
+</section>
+<!-- Admin Commands Section -->
+<section class="space-y-sm">
+<h3 class="font-title-sm text-title-sm text-primary px-1">Table Controls</h3>
+<div class="grid grid-cols-1 gap-sm">
+<!-- Action Row 1 -->
+<div class="flex gap-sm">
+<button class="flex-1 h-14 bg-surface-container-high rounded-xl border border-white/5 flex items-center justify-center gap-xs hover:bg-surface-container-highest active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined text-secondary" data-icon="pause_circle">pause_circle</span>
+<span class="font-body-md text-body-md font-semibold">Pause Table</span>
+</button>
+<button class="flex-1 h-14 bg-surface-container-high rounded-xl border border-white/5 flex items-center justify-center gap-xs hover:bg-surface-container-highest active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined text-secondary" data-icon="keyboard_double_arrow_up">keyboard_double_arrow_up</span>
+<span class="font-body-md text-body-md font-semibold">Raise Blinds</span>
+</button>
+</div>
+<!-- Action Row 2 -->
+<div class="flex gap-sm">
+<button class="flex-1 h-14 bg-error-container/20 border border-error/20 rounded-xl flex items-center justify-center gap-xs hover:bg-error-container/30 active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined text-error" data-icon="cancel">cancel</span>
+<span class="font-body-md text-body-md font-semibold text-error">Close Table</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Player Management List -->
+<section class="space-y-sm">
+<div class="flex justify-between items-center px-1">
+<h3 class="font-title-sm text-title-sm text-primary">Manage Players</h3>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Swipe for actions</span>
+</div>
+<div class="space-y-xs">
+<!-- Player Item 1 -->
+<div class="glass-card p-sm rounded-xl flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center overflow-hidden">
+<img alt="Player" data-alt="A high-quality digital portrait of a stylish young male poker player with glasses and a beard. The visual style is clean, high-contrast digital art with a muted color palette of slate and emerald green accents. The lighting is soft and top-down, creating a modern, fintech-ready profile image that feels exclusive and professional." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPRtKgfTLOcOuOQ84uiOMklOaNmpx1rBVvyVLoD-GgBuO_1f-PsiEXG4BVlVhOEWerUXMhNhkMg14h2nGf4zfSbjQzJIWt-GeS5Fdtx2YdVqBrv8d-CdGRFX2LbEHw7iBjTGd4Xf9SCJyjCZC9p_O4Sm3RgRYvJasPSzrP9wzjlTbEcYlTEEopejhhGRiLn07bDu9teb6CVakZpYKrPeERS71Wd_-O7PYP7NP3g8ZuEAg89qTVgkz6s0OhqVbFQOjCYDX88w0gyR0"/>
+</div>
+<div>
+<p class="font-body-md text-body-md font-bold text-primary">Alex "Ace" Rivera</p>
+<p class="font-label-caps text-label-caps text-on-surface-variant">STACK: $4,520</p>
+</div>
+</div>
+<div class="flex gap-xs">
+<button class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors" title="Sit-out">
+<span class="material-symbols-outlined text-[20px]" data-icon="timer_off">timer_off</span>
+</button>
+<button class="w-10 h-10 rounded-lg bg-error-container/10 flex items-center justify-center text-error hover:bg-error-container/20 transition-colors" title="Kick">
+<span class="material-symbols-outlined text-[20px]" data-icon="person_remove">person_remove</span>
+</button>
+</div>
+</div>
+<!-- Player Item 2 -->
+<div class="glass-card p-sm rounded-xl flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center overflow-hidden">
+<img alt="Player" data-alt="A sophisticated digital avatar of a female professional poker player with a focused expression, wearing a minimalist black turtleneck. The aesthetic is clean and high-end, utilizing a palette of deep blacks and subtle highlights. The background is a soft-focus charcoal texture that emphasizes the modern, analytical personality of the game environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAykhKDOBMEHMqcB9obh8_5XeJHZnKPViI6AKIec57KubNx0qqVpZQ7unkqQnzKTaq4GYPtDubEwsniwzq62LoZ4DUGWT3rJ_htbQu68m_-a20yFtNiLwds8MGL48utumYIqupnZGARU0Oy_qvBbb4xSFLVJAdNsTKRJ_e9TMpp40YGR_SwsfuwTLhfhfP1s7pHom9_ZWaRTT_bxhHReRQAwop5dquVldTGme9lgDZqs8FAIbpWDsS7mXZ6bu4gbUBrZyLdeO84_Mw"/>
+</div>
+<div>
+<p class="font-body-md text-body-md font-bold text-primary">Sarah Jennings</p>
+<p class="font-label-caps text-label-caps text-on-surface-variant">STACK: $1,280</p>
+</div>
+</div>
+<div class="flex gap-xs">
+<button class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors" title="Sit-out">
+<span class="material-symbols-outlined text-[20px]" data-icon="timer_off">timer_off</span>
+</button>
+<button class="w-10 h-10 rounded-lg bg-error-container/10 flex items-center justify-center text-error hover:bg-error-container/20 transition-colors" title="Kick">
+<span class="material-symbols-outlined text-[20px]" data-icon="person_remove">person_remove</span>
+</button>
+</div>
+</div>
+<!-- Player Item 3 (Sit-out State) -->
+<div class="glass-card p-sm rounded-xl flex items-center justify-between opacity-60">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center overflow-hidden grayscale">
+<img alt="Player" data-alt="A clean, professional digital avatar portrait of a man with short brown hair and a friendly but serious expression. The lighting is bright and even, suited for a high-end application profile. The style is minimalist with a focus on clear facial features and a sophisticated tonal range of grays and off-whites." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDw34L7By2PDbjIcsBpPU71kFOU5US0gQBBGUsBXSQELSU4APpM3P0HOIvrjc9FH1SWF4UyAhXP0K55w99OJFSCr4CKyMTO91_jHmStSDag4p5bbAPB0wP1DLmcBCUBxlarxaUzoIZbKSRWWLolP6-_Cawr6XWltANeqLD1k3Fe5dAhtqRicP-5D2_Okip1ZckELw5TStFrkCC7zzyoruforVJHhf5s83i4FMyVIK07zj3u_zBIVA-EGHcwDUfO-MkrTE1RzlQPirE"/>
+</div>
+<div>
+<p class="font-body-md text-body-md font-bold text-primary">Mike Ross</p>
+<div class="flex items-center gap-xs">
+<span class="font-label-caps text-label-caps text-error">SITTING OUT</span>
+</div>
+</div>
+</div>
+<div class="flex gap-xs">
+<button class="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary hover:bg-secondary/20 transition-colors" title="Resume">
+<span class="material-symbols-outlined text-[20px]" data-icon="play_arrow">play_arrow</span>
+</button>
+<button class="w-10 h-10 rounded-lg bg-error-container/10 flex items-center justify-center text-error hover:bg-error-container/20 transition-colors" title="Kick">
+<span class="material-symbols-outlined text-[20px]" data-icon="person_remove">person_remove</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Table Logs (Analytical View) -->
+<section class="space-y-sm">
+<h3 class="font-title-sm text-title-sm text-primary px-1">Recent Events</h3>
+<div class="glass-card rounded-xl overflow-hidden">
+<div class="p-sm border-b border-white/5 bg-white/5 flex justify-between">
+<span class="font-label-caps text-label-caps text-on-surface-variant">EVENT</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant">TIME</span>
+</div>
+<div class="p-sm space-y-xs">
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-primary">Blinds increased to 10/20</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">2m ago</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-primary">New hand #24 started</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">4m ago</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-primary">Player 'Sarah' topped up $500</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">8m ago</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar Component -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-md pb-safe-area-inset pt-xs bg-surface-container/90 backdrop-blur-xl border-t border-white/5 rounded-t-xl">
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-caps text-label-caps uppercase">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-secondary font-bold active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="casino" data-weight="fill" style="font-variation-settings: 'FILL' 1;">casino</span>
+<span class="font-label-caps text-label-caps uppercase">Games</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span>
+<span class="font-label-caps text-label-caps uppercase">Ranking</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-caps text-label-caps uppercase">Profile</span>
+</div>
+</nav>
+</body></html>

@@ -13,33 +13,38 @@ import {
   RoomStatus as PrismaRoomStatus,
   type User
 } from "@prisma/client";
-import {
-  type CancelRebuyRequestDto,
-  type CancelRebuyResponseDto,
-  type CloseSettlementRequestDto,
-  type CloseSettlementResponseDto,
-  type CreateRoomRequestDto,
-  type CreateRoomResponseDto,
-  type CreateRebuyRequestDto,
-  type CreateRebuyResponseDto,
-  type GetRebuyHistoryResponseDto,
-  type GetRoomResponseDto,
-  type JoinRoomRequestDto,
-  type JoinRoomResponseDto,
-  type RoomSettlementDto,
-  type RoomsListResponseDto,
-  type SettlementPlayerResultDto,
-  type SettlementFinalAmountInputDto,
-  type SettlementPreviewRequestDto,
-  type SettlementPreviewResponseDto,
-  type SettlementTransferDto,
-  type StartRoomResponseDto,
-  type UserDto
+import type {
+  CancelRebuyRequestDto,
+  CancelRebuyResponseDto,
+  CloseSettlementRequestDto,
+  CloseSettlementResponseDto,
+  CreateRoomRequestDto,
+  CreateRoomResponseDto,
+  CreateRebuyRequestDto,
+  CreateRebuyResponseDto,
+  GetRebuyHistoryResponseDto,
+  GetRoomResponseDto,
+  JoinRoomRequestDto,
+  JoinRoomResponseDto,
+  LeaveRoomResponseDto,
+  RoomSettlementDto,
+  ReturnToRoomResponseDto,
+  RoomsListResponseDto,
+  SettlementPlayerResultDto,
+  SettlementFinalAmountInputDto,
+  SettlementPreviewRequestDto,
+  SettlementPreviewResponseDto,
+  SettlementTransferDto,
+  StartRoomResponseDto,
+  SubmitFinalChipsRequestDto,
+  UserDto
 } from "@pokertable/shared";
 import { randomBytes } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { PlayerStatsService } from "../player-stats/player-stats.service";
 import { ApiError } from "../shared/api-error";
+import { chipsToMinorAmount } from "../shared/chips";
+import { appendWebAppCacheBuster } from "../shared/web-app-url";
 import { ROOM_ERROR_CODES } from "./rooms.constants";
 import {
   calculatePlayerNetResults,
@@ -55,18 +60,20 @@ const GAME_TYPES: readonly CreateRoomRequestDto["gameType"][] = [
 ] as const;
 const ROOM_TITLE_MAX_LENGTH = 80;
 const ROOM_SUPPORTED_CURRENCIES = ["RUB", "USD", "EUR"] as const;
-const ROOM_MAX_REBUY_AMOUNT_MINOR = 1_000_000_000n;
-const ROOM_MAX_STARTING_STACK = 1_000_000;
+const ROOM_MAX_CHIPS = 1_000_000_000n;
+const ROOM_MAX_CHIPS_PER_CURRENCY_UNIT = 1_000_000n;
 const REBUY_PERMISSIONS = ["PLAYER_SELF", "ADMIN_APPROVAL", "ADMIN_ONLY"] as const;
 const ROOM_START_PARAM_PREFIX = "room_";
+const INVITE_CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const INVITE_CODE_LENGTH = 8;
 const ZERO_REBUY_TOTALS = {
   rebuyCount: 0,
-  totalBuyinMinor: 0n
+  totalRebuyChips: 0n
 } as const;
 
 type RoomMembershipWithRoom = RoomPlayer & {
   room: Room & {
-    players: Pick<RoomPlayer, "status">[];
+    players: Pick<RoomPlayer, "status" | "id">[];
   };
 };
 
@@ -84,7 +91,7 @@ type RebuySummary = {
     string,
     {
       rebuyCount: number;
-      totalBuyinMinor: bigint;
+      totalRebuyChips: bigint;
     }
   >;
 };
@@ -102,14 +109,14 @@ type SettlementPreviewData = {
 type RoomSettlementRecord = {
   id: string;
   status: PrismaSettlementStatus;
-  totalBuyinsMinor: bigint;
-  totalFinalAmountMinor: bigint;
-  differenceMinor: bigint;
+  totalBuyinsChips: bigint;
+  totalFinalAmountChips: bigint;
+  differenceChips: bigint;
   calculatedAt: Date;
   transfers: Array<{
     fromRoomPlayerId: string;
     toRoomPlayerId: string;
-    amountMinor: bigint;
+    amountChips: bigint;
     fromPlayer: RoomPlayer & {
       user: User;
     };
@@ -141,6 +148,7 @@ export class RoomsService {
           include: {
             players: {
               select: {
+                id: true,
                 status: true
               }
             }
@@ -182,7 +190,7 @@ export class RoomsService {
                 closedAt: membership.room.closedAt.toISOString()
               }
             : {}),
-          myNetResultMinor: membership.netResultMinor?.toString() ?? "0"
+          myNetResultChips: membership.netResultChips?.toString() ?? "0"
         };
       });
 
@@ -208,8 +216,14 @@ export class RoomsService {
               ownerUserId: user.id,
               title: input.title.trim(),
               currency: input.currency.trim().toUpperCase(),
-              rebuyAmountMinor: BigInt(input.rebuyAmountMinor),
-              startingStack: input.startingStack,
+              rebuyAmountMinor: chipsToMinorAmount(
+                input.rebuyChips,
+                input.chipsPerCurrencyUnit
+              ),
+              startingStack: toNullableNumber(input.buyInChips),
+              buyInChips: BigInt(input.buyInChips),
+              rebuyChips: BigInt(input.rebuyChips),
+              chipsPerCurrencyUnit: Number(input.chipsPerCurrencyUnit),
               gameType: input.gameType,
               rebuyPermission: input.rebuyPermission,
               inviteCode,
@@ -282,11 +296,16 @@ export class RoomsService {
     }
 
     const rebuySummary = await this.getActiveRebuySummary([roomId]);
-    const roomTotalPotMinor = rebuySummary.roomTotals.get(roomId) ?? 0n;
-    const myBuyinsMinor = rebuySummary.playerTotals.get(membership.id)?.totalBuyinMinor ?? 0n;
+    const roomTotalPotChips = getRoomTotalPotChips(room, rebuySummary);
+    const myBuyinsChips = getPlayerTotalBuyinChips(room, membership, rebuySummary);
     const settlement =
       room.status === PrismaRoomStatus.CLOSED
-        ? await this.getLatestRoomSettlementSnapshot(roomId, room.players, rebuySummary)
+        ? await this.getLatestRoomSettlementSnapshot(
+            roomId,
+            room.buyInChips,
+            room.players,
+            rebuySummary
+          )
         : null;
 
     return {
@@ -295,14 +314,15 @@ export class RoomsService {
         title: room.title,
         status: room.status,
         currency: room.currency,
-        rebuyAmountMinor: room.rebuyAmountMinor.toString(),
-        startingStack: room.startingStack,
+        buyInChips: room.buyInChips.toString(),
+        rebuyChips: room.rebuyChips.toString(),
+        chipsPerCurrencyUnit: room.chipsPerCurrencyUnit.toString(),
         gameType: room.gameType,
         rebuyPermission: room.rebuyPermission,
         inviteCode: room.inviteCode,
         inviteUrl: buildRoomInviteUrl(room.inviteCode),
-        totalPotMinor: roomTotalPotMinor.toString(),
-        myBuyinsMinor: myBuyinsMinor.toString(),
+        totalPotChips: roomTotalPotChips.toString(),
+        myBuyinsChips: myBuyinsChips.toString(),
         playersCount: room.players.filter(isActivePlayer).length,
         myRole: membership.role,
         myPlayerId: membership.id,
@@ -320,9 +340,9 @@ export class RoomsService {
           role: player.role,
           status: player.status,
           rebuyCount: totals.rebuyCount,
-          totalBuyinMinor: totals.totalBuyinMinor.toString(),
-          finalAmountMinor: player.finalAmountMinor?.toString() ?? null,
-          netResultMinor: player.netResultMinor?.toString() ?? null
+          totalBuyinChips: getPlayerTotalBuyinChips(room, player, rebuySummary).toString(),
+          finalAmountChips: player.finalAmountChips?.toString() ?? null,
+          netResultChips: player.netResultChips?.toString() ?? null
         };
       }),
       settlement
@@ -343,9 +363,12 @@ export class RoomsService {
       );
     }
 
-    const room = await this.prisma.room.findUnique({
+    const room = await this.prisma.room.findFirst({
       where: {
-        inviteCode
+        inviteCode: {
+          equals: inviteCode,
+          mode: "insensitive"
+        }
       }
     });
 
@@ -398,7 +421,11 @@ export class RoomsService {
         data: {
           status: PrismaRoomPlayerStatus.ACTIVE,
           removedAt: null,
-          displayName: getDisplayName(user)
+          displayName: getDisplayName(user),
+          finalAmountChips: null,
+          finalAmountMinor: null,
+          netResultChips: null,
+          netResultMinor: null
         }
       });
 
@@ -490,6 +517,107 @@ export class RoomsService {
     };
   }
 
+  async leaveRoom(
+    user: UserDto,
+    roomId: string,
+    input: SubmitFinalChipsRequestDto
+  ): Promise<LeaveRoomResponseDto> {
+    const membership = await this.getAccessibleMembership(user.id, roomId);
+    const room = await this.getRoomOrThrow(roomId);
+
+    if (room.status !== PrismaRoomStatus.RUNNING) {
+      throw new ApiError(
+        ROOM_ERROR_CODES.invalidStatus,
+        "Выйти из игры можно только во время раздач",
+        HttpStatus.CONFLICT
+      );
+    }
+
+    if (membership.status !== PrismaRoomPlayerStatus.ACTIVE) {
+      throw new ApiError(
+        ROOM_ERROR_CODES.invalidStatus,
+        "Сейчас нельзя завершить участие в этой игре",
+        HttpStatus.CONFLICT
+      );
+    }
+
+    const finalAmountChips = this.parseNonNegativeInteger(
+      input.finalAmountChips,
+      "Сколько фишек у вас осталось?"
+    );
+    const rebuySummary = await this.getActiveRebuySummary([roomId]);
+    const totalBuyinChips = getPlayerTotalBuyinChips(room, membership, rebuySummary);
+    const netResultChips = finalAmountChips - totalBuyinChips;
+    const updatedMembership = await this.prisma.roomPlayer.update({
+      where: {
+        id: membership.id
+      },
+      data: {
+        status: PrismaRoomPlayerStatus.LEFT,
+        finalAmountChips,
+        finalAmountMinor: chipsToMinorAmount(
+          finalAmountChips.toString(),
+          room.chipsPerCurrencyUnit.toString()
+        ),
+        netResultChips,
+        netResultMinor: chipsToMinorAmount(
+          netResultChips.toString(),
+          room.chipsPerCurrencyUnit.toString()
+        )
+      }
+    });
+
+    return {
+      roomId,
+      playerId: updatedMembership.id,
+      playerStatus: updatedMembership.status,
+      finalAmountChips: updatedMembership.finalAmountChips!.toString(),
+      netResultChips: updatedMembership.netResultChips!.toString()
+    };
+  }
+
+  async returnToRoom(user: UserDto, roomId: string): Promise<ReturnToRoomResponseDto> {
+    const membership = await this.getAccessibleMembership(user.id, roomId);
+    const room = await this.getRoomOrThrow(roomId);
+
+    if (room.status !== PrismaRoomStatus.RUNNING) {
+      throw new ApiError(
+        ROOM_ERROR_CODES.invalidStatus,
+        "Вернуться в игру можно только пока она идёт",
+        HttpStatus.CONFLICT
+      );
+    }
+
+    if (membership.status !== PrismaRoomPlayerStatus.LEFT) {
+      throw new ApiError(
+        ROOM_ERROR_CODES.invalidStatus,
+        "Сейчас возвращаться в игру не нужно",
+        HttpStatus.CONFLICT
+      );
+    }
+
+    const updatedMembership = await this.prisma.roomPlayer.update({
+      where: {
+        id: membership.id
+      },
+      data: {
+        status: PrismaRoomPlayerStatus.ACTIVE,
+        finalAmountChips: null,
+        finalAmountMinor: null,
+        netResultChips: null,
+        netResultMinor: null
+      }
+    });
+
+    return {
+      roomId,
+      playerId: updatedMembership.id,
+      playerStatus: updatedMembership.status,
+      finalAmountChips: null,
+      netResultChips: null
+    };
+  }
+
   async createRebuy(
     user: UserDto,
     roomId: string,
@@ -574,7 +702,11 @@ export class RoomsService {
           data: {
             roomId,
             roomPlayerId: targetPlayer.id,
-            amountMinor: room.rebuyAmountMinor,
+            amountMinor: chipsToMinorAmount(
+              room.rebuyChips.toString(),
+              room.chipsPerCurrencyUnit.toString()
+            ),
+            amountChips: room.rebuyChips,
             createdByUserId: user.id,
             source: getRebuySource({
               isAdmin,
@@ -584,23 +716,32 @@ export class RoomsService {
           }
         });
         const summary = await this.getActiveRebuySummary([roomId], tx);
+        const activePlayersCount = await this.getActivePlayersCount(roomId, tx);
         const playerTotals = summary.playerTotals.get(targetPlayer.id) ?? ZERO_REBUY_TOTALS;
         const response: CreateRebuyResponseDto = {
           rebuy: {
             id: rebuy.id,
             roomId: rebuy.roomId,
             roomPlayerId: rebuy.roomPlayerId,
-            amountMinor: rebuy.amountMinor.toString(),
+            amountChips: rebuy.amountChips.toString(),
             source: rebuy.source,
             status: rebuy.status,
             createdAt: rebuy.createdAt.toISOString()
           },
           playerTotals: {
             rebuyCount: playerTotals.rebuyCount,
-            totalBuyinMinor: playerTotals.totalBuyinMinor.toString()
+            totalBuyinChips: getPlayerTotalBuyinChipsFromTotals(
+              room.buyInChips,
+              true,
+              playerTotals.totalRebuyChips
+            ).toString()
           },
           roomTotals: {
-            totalPotMinor: (summary.roomTotals.get(roomId) ?? 0n).toString()
+            totalPotChips: getRoomTotalPotChipsFromTotals(
+              room.buyInChips,
+              activePlayersCount,
+              summary.roomTotals.get(roomId) ?? 0n
+            ).toString()
           }
         };
 
@@ -713,6 +854,7 @@ export class RoomsService {
           }
         });
         const summary = await this.getActiveRebuySummary([roomId], tx);
+        const activePlayersCount = await this.getActivePlayersCount(roomId, tx);
         const playerTotals = summary.playerTotals.get(updatedRebuy.roomPlayerId) ?? ZERO_REBUY_TOTALS;
         const response: CancelRebuyResponseDto = {
           rebuyId: updatedRebuy.id,
@@ -722,10 +864,18 @@ export class RoomsService {
           cancellationReason: updatedRebuy.cancellationReason ?? null,
           playerTotals: {
             rebuyCount: playerTotals.rebuyCount,
-            totalBuyinMinor: playerTotals.totalBuyinMinor.toString()
+            totalBuyinChips: getPlayerTotalBuyinChipsFromTotals(
+              room.buyInChips,
+              true,
+              playerTotals.totalRebuyChips
+            ).toString()
           },
           roomTotals: {
-            totalPotMinor: (summary.roomTotals.get(roomId) ?? 0n).toString()
+            totalPotChips: getRoomTotalPotChipsFromTotals(
+              room.buyInChips,
+              activePlayersCount,
+              summary.roomTotals.get(roomId) ?? 0n
+            ).toString()
           }
         };
 
@@ -802,6 +952,7 @@ export class RoomsService {
 
     return this.buildSettlementPreviewData(
       input.finalAmounts,
+      room.buyInChips,
       activePlayers,
       rebuySummary
     ).response;
@@ -825,15 +976,16 @@ export class RoomsService {
       const rebuySummary = await this.getActiveRebuySummary([roomId], tx);
       const settlementPreview = this.buildSettlementPreviewData(
         input.finalAmounts,
+        room.buyInChips,
         activePlayers,
         rebuySummary
       );
-      const differenceMinor = BigInt(settlementPreview.response.differenceMinor);
+      const differenceChips = BigInt(settlementPreview.response.differenceChips);
 
-      if (differenceMinor !== 0n) {
+      if (differenceChips !== 0n) {
         throw new ApiError(
           ROOM_ERROR_CODES.settlementNotBalanced,
-          getSettlementBalanceMessage(differenceMinor),
+          getSettlementBalanceMessage(differenceChips),
           HttpStatus.CONFLICT
         );
       }
@@ -844,8 +996,16 @@ export class RoomsService {
             id: player.roomPlayerId
           },
           data: {
-            finalAmountMinor: player.finalAmountMinor,
-            netResultMinor: player.netResultMinor
+            finalAmountMinor: chipsToMinorAmount(
+              player.finalAmountChips.toString(),
+              room.chipsPerCurrencyUnit.toString()
+            ),
+            netResultMinor: chipsToMinorAmount(
+              player.netResultChips.toString(),
+              room.chipsPerCurrencyUnit.toString()
+            ),
+            finalAmountChips: player.finalAmountChips,
+            netResultChips: player.netResultChips
           }
         });
       }
@@ -854,9 +1014,21 @@ export class RoomsService {
         data: {
           roomId,
           status: PrismaSettlementStatus.CLOSED,
-          totalBuyinsMinor: BigInt(settlementPreview.response.totalBuyinsMinor),
-          totalFinalAmountMinor: BigInt(settlementPreview.response.totalFinalAmountMinor),
-          differenceMinor,
+          totalBuyinsMinor: chipsToMinorAmount(
+            settlementPreview.response.totalBuyinsChips,
+            room.chipsPerCurrencyUnit.toString()
+          ),
+          totalFinalAmountMinor: chipsToMinorAmount(
+            settlementPreview.response.totalFinalAmountChips,
+            room.chipsPerCurrencyUnit.toString()
+          ),
+          differenceMinor: chipsToMinorAmount(
+            settlementPreview.response.differenceChips,
+            room.chipsPerCurrencyUnit.toString()
+          ),
+          totalBuyinsChips: BigInt(settlementPreview.response.totalBuyinsChips),
+          totalFinalAmountChips: BigInt(settlementPreview.response.totalFinalAmountChips),
+          differenceChips,
           closedByUserId: user.id
         }
       });
@@ -867,7 +1039,11 @@ export class RoomsService {
             settlementId: settlement.id,
             fromRoomPlayerId: transfer.fromRoomPlayerId,
             toRoomPlayerId: transfer.toRoomPlayerId,
-            amountMinor: BigInt(transfer.amountMinor)
+            amountMinor: chipsToMinorAmount(
+              transfer.amountChips,
+              room.chipsPerCurrencyUnit.toString()
+            ),
+            amountChips: BigInt(transfer.amountChips)
           }))
         });
       }
@@ -899,7 +1075,11 @@ export class RoomsService {
   private validateCreateRoomInput(input: CreateRoomRequestDto): void {
     const title = input.title.trim();
     const currency = input.currency.trim().toUpperCase();
-    const rebuyAmountMinor = /^\d+$/.test(input.rebuyAmountMinor) ? BigInt(input.rebuyAmountMinor) : null;
+    const buyInChips = /^\d+$/.test(input.buyInChips) ? BigInt(input.buyInChips) : null;
+    const rebuyChips = /^\d+$/.test(input.rebuyChips) ? BigInt(input.rebuyChips) : null;
+    const chipsPerCurrencyUnit = /^\d+$/.test(input.chipsPerCurrencyUnit)
+      ? BigInt(input.chipsPerCurrencyUnit)
+      : null;
 
     if (title.length === 0) {
       throw new ApiError(
@@ -933,26 +1113,7 @@ export class RoomsService {
       );
     }
 
-    if (rebuyAmountMinor === null || rebuyAmountMinor <= 0n) {
-      throw new ApiError(
-        ROOM_ERROR_CODES.invalidInput,
-        "Сумма ребая должна быть больше нуля",
-        HttpStatus.BAD_REQUEST
-      );
-    }
-
-    if (rebuyAmountMinor > ROOM_MAX_REBUY_AMOUNT_MINOR) {
-      throw new ApiError(
-        ROOM_ERROR_CODES.invalidInput,
-        "Сумма ребая слишком большая",
-        HttpStatus.BAD_REQUEST
-      );
-    }
-
-    if (
-      input.startingStack !== null &&
-      (!Number.isInteger(input.startingStack) || input.startingStack <= 0)
-    ) {
+    if (buyInChips === null || buyInChips <= 0n) {
       throw new ApiError(
         ROOM_ERROR_CODES.invalidInput,
         "Стартовый стек должен быть больше нуля",
@@ -960,10 +1121,42 @@ export class RoomsService {
       );
     }
 
-    if (input.startingStack !== null && input.startingStack > ROOM_MAX_STARTING_STACK) {
+    if (buyInChips > ROOM_MAX_CHIPS) {
       throw new ApiError(
         ROOM_ERROR_CODES.invalidInput,
         "Стартовый стек слишком большой",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    if (rebuyChips === null || rebuyChips <= 0n) {
+      throw new ApiError(
+        ROOM_ERROR_CODES.invalidInput,
+        "Ребай должен быть больше нуля",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    if (rebuyChips > ROOM_MAX_CHIPS) {
+      throw new ApiError(
+        ROOM_ERROR_CODES.invalidInput,
+        "Ребай слишком большой",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    if (chipsPerCurrencyUnit === null || chipsPerCurrencyUnit <= 0n) {
+      throw new ApiError(
+        ROOM_ERROR_CODES.invalidInput,
+        "Укажите, сколько фишек соответствует одной единице валюты",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    if (chipsPerCurrencyUnit > ROOM_MAX_CHIPS_PER_CURRENCY_UNIT) {
+      throw new ApiError(
+        ROOM_ERROR_CODES.invalidInput,
+        "Курс фишек слишком большой",
         HttpStatus.BAD_REQUEST
       );
     }
@@ -1062,7 +1255,9 @@ export class RoomsService {
     return prisma.roomPlayer.findMany({
       where: {
         roomId,
-        status: PrismaRoomPlayerStatus.ACTIVE
+        status: {
+          in: [PrismaRoomPlayerStatus.ACTIVE, PrismaRoomPlayerStatus.LEFT]
+        }
       },
       include: {
         user: true
@@ -1073,8 +1268,26 @@ export class RoomsService {
     });
   }
 
+  private async getActivePlayersCount(
+    roomId: string,
+    prisma: PrismaService | Prisma.TransactionClient = this.prisma
+  ): Promise<number> {
+    const activePlayers = await prisma.roomPlayer.findMany({
+      where: {
+        roomId,
+        status: PrismaRoomPlayerStatus.ACTIVE
+      },
+      select: {
+        id: true
+      }
+    });
+
+    return activePlayers.length;
+  }
+
   private buildSettlementPreviewData(
     finalAmounts: SettlementFinalAmountInputDto[],
+    buyInChips: bigint,
     activePlayers: ActiveSettlementPlayer[],
     rebuySummary: RebuySummary
   ): SettlementPreviewData {
@@ -1098,13 +1311,13 @@ export class RoomsService {
         );
       }
 
-      finalAmountsByPlayerId.set(finalAmount.roomPlayerId, BigInt(finalAmount.finalAmountMinor));
+      finalAmountsByPlayerId.set(finalAmount.roomPlayerId, BigInt(finalAmount.finalAmountChips));
     }
 
     if (finalAmountsByPlayerId.size !== activePlayers.length) {
       throw new ApiError(
         ROOM_ERROR_CODES.invalidInput,
-        "Нужны финальные суммы всех игроков за столом",
+        "Нужны финальные суммы всех, кто участвовал в игре",
         HttpStatus.BAD_REQUEST
       );
     }
@@ -1113,17 +1326,21 @@ export class RoomsService {
       activePlayers.map((player) => ({
         roomPlayerId: player.id,
         displayName: getRoomPlayerDisplayName(player),
-        totalBuyinMinor: rebuySummary.playerTotals.get(player.id)?.totalBuyinMinor ?? 0n,
-        finalAmountMinor: finalAmountsByPlayerId.get(player.id) ?? 0n
+        totalBuyinChips: getPlayerTotalBuyinChipsFromTotals(
+          buyInChips,
+          true,
+          rebuySummary.playerTotals.get(player.id)?.totalRebuyChips ?? 0n
+        ),
+        finalAmountChips: finalAmountsByPlayerId.get(player.id) ?? 0n
       }))
     );
     const balance = validateSettlementBalance(calculatedPlayers);
     const players = calculatedPlayers.map((player) => ({
       roomPlayerId: player.roomPlayerId,
       displayName: player.displayName,
-      totalBuyinMinor: player.totalBuyinMinor.toString(),
-      finalAmountMinor: player.finalAmountMinor.toString(),
-      netResultMinor: player.netResultMinor.toString()
+      totalBuyinChips: player.totalBuyinChips.toString(),
+      finalAmountChips: player.finalAmountChips.toString(),
+      netResultChips: player.netResultChips.toString()
     }));
     const transfers = balance.isBalanced
       ? calculateTransfers(calculatedPlayers).map((transfer) => {
@@ -1143,16 +1360,16 @@ export class RoomsService {
             fromName: getRoomPlayerDisplayName(fromPlayer),
             toRoomPlayerId: transfer.toRoomPlayerId,
             toName: getRoomPlayerDisplayName(toPlayer),
-            amountMinor: transfer.amountMinor.toString()
+            amountChips: transfer.amountChips.toString()
           };
         })
       : [];
 
     return {
       response: {
-        totalBuyinsMinor: balance.totalBuyinsMinor.toString(),
-        totalFinalAmountMinor: balance.totalFinalAmountMinor.toString(),
-        differenceMinor: balance.differenceMinor.toString(),
+        totalBuyinsChips: balance.totalBuyinsChips.toString(),
+        totalFinalAmountChips: balance.totalFinalAmountChips.toString(),
+        differenceChips: balance.differenceChips.toString(),
         players,
         transfers
       },
@@ -1167,6 +1384,14 @@ export class RoomsService {
     }
   }
 
+  private parseNonNegativeInteger(value: string, message: string): bigint {
+    if (!/^\d+$/.test(value)) {
+      throw new ApiError(ROOM_ERROR_CODES.invalidInput, message, HttpStatus.BAD_REQUEST);
+    }
+
+    return BigInt(value);
+  }
+
   private async getActiveRebuySummary(
     roomIds: string[],
     prisma: PrismaService | Prisma.TransactionClient = this.prisma
@@ -1176,7 +1401,7 @@ export class RoomsService {
       string,
       {
         rebuyCount: number;
-        totalBuyinMinor: bigint;
+        totalRebuyChips: bigint;
       }
     >();
 
@@ -1197,21 +1422,21 @@ export class RoomsService {
       select: {
         roomId: true,
         roomPlayerId: true,
-        amountMinor: true
+        amountChips: true
       }
     });
 
     for (const rebuy of rebuys) {
-      roomTotals.set(rebuy.roomId, (roomTotals.get(rebuy.roomId) ?? 0n) + rebuy.amountMinor);
+      roomTotals.set(rebuy.roomId, (roomTotals.get(rebuy.roomId) ?? 0n) + rebuy.amountChips);
 
       const currentPlayerTotals = playerTotals.get(rebuy.roomPlayerId) ?? {
         rebuyCount: 0,
-        totalBuyinMinor: 0n
+        totalRebuyChips: 0n
       };
 
       playerTotals.set(rebuy.roomPlayerId, {
         rebuyCount: currentPlayerTotals.rebuyCount + 1,
-        totalBuyinMinor: currentPlayerTotals.totalBuyinMinor + rebuy.amountMinor
+        totalRebuyChips: currentPlayerTotals.totalRebuyChips + rebuy.amountChips
       });
     }
 
@@ -1323,7 +1548,11 @@ export class RoomsService {
   }
 
   private createInviteCode(): string {
-    return randomBytes(6).toString("base64url");
+    const random = randomBytes(INVITE_CODE_LENGTH);
+
+    return Array.from(random, (byte) => INVITE_CODE_ALPHABET[byte % INVITE_CODE_ALPHABET.length])
+      .join("")
+      .slice(0, INVITE_CODE_LENGTH);
   }
 
   private isUniqueConstraintError(error: unknown): boolean {
@@ -1336,17 +1565,21 @@ export class RoomsService {
   }
 
   private toRoomListItem(membership: RoomMembershipWithRoom, rebuySummary: RebuySummary) {
-    const myBuyinsMinor = rebuySummary.playerTotals.get(membership.id)?.totalBuyinMinor ?? 0n;
-
     return {
       id: membership.room.id,
       title: membership.room.title,
       status: membership.room.status,
       currency: membership.room.currency,
-      rebuyAmountMinor: membership.room.rebuyAmountMinor.toString(),
+      buyInChips: membership.room.buyInChips.toString(),
+      rebuyChips: membership.room.rebuyChips.toString(),
+      chipsPerCurrencyUnit: membership.room.chipsPerCurrencyUnit.toString(),
       playersCount: membership.room.players.filter(isActivePlayer).length,
-      totalPotMinor: (rebuySummary.roomTotals.get(membership.room.id) ?? 0n).toString(),
-      myBuyinsMinor: myBuyinsMinor.toString()
+      totalPotChips: getRoomTotalPotChips(membership.room, rebuySummary).toString(),
+      myBuyinsChips: getPlayerTotalBuyinChips(
+        membership.room,
+        membership,
+        rebuySummary
+      ).toString()
     };
   }
 
@@ -1356,7 +1589,7 @@ export class RoomsService {
       roomId: rebuy.roomId,
       roomPlayerId: rebuy.roomPlayerId,
       playerName: getRoomPlayerDisplayName(rebuy.roomPlayer),
-      amountMinor: rebuy.amountMinor.toString(),
+      amountChips: rebuy.amountChips.toString(),
       source: rebuy.source,
       status: rebuy.status,
       createdAt: rebuy.createdAt.toISOString(),
@@ -1371,6 +1604,7 @@ export class RoomsService {
 
   private async getLatestRoomSettlementSnapshot(
     roomId: string,
+    buyInChips: bigint,
     players: Array<
       RoomPlayer & {
         user: User;
@@ -1409,7 +1643,7 @@ export class RoomsService {
 
     const settlementPlayers: SettlementPlayerResultDto[] = players
       .filter(
-        (player) => player.finalAmountMinor !== null && player.netResultMinor !== null
+        (player) => player.finalAmountChips !== null && player.netResultChips !== null
       )
       .map((player) => {
         const totals = rebuySummary.playerTotals.get(player.id) ?? ZERO_REBUY_TOTALS;
@@ -1417,18 +1651,22 @@ export class RoomsService {
         return {
           roomPlayerId: player.id,
           displayName: getRoomPlayerDisplayName(player),
-          totalBuyinMinor: totals.totalBuyinMinor.toString(),
-          finalAmountMinor: player.finalAmountMinor!.toString(),
-          netResultMinor: player.netResultMinor!.toString()
+          totalBuyinChips: getPlayerTotalBuyinChipsFromTotals(
+            buyInChips,
+            true,
+            totals.totalRebuyChips
+          ).toString(),
+          finalAmountChips: player.finalAmountChips!.toString(),
+          netResultChips: player.netResultChips!.toString()
         };
       });
 
     return {
       id: settlement.id,
       status: settlement.status,
-      totalBuyinsMinor: settlement.totalBuyinsMinor.toString(),
-      totalFinalAmountMinor: settlement.totalFinalAmountMinor.toString(),
-      differenceMinor: settlement.differenceMinor.toString(),
+      totalBuyinsChips: settlement.totalBuyinsChips.toString(),
+      totalFinalAmountChips: settlement.totalFinalAmountChips.toString(),
+      differenceChips: settlement.differenceChips.toString(),
       calculatedAt: settlement.calculatedAt.toISOString(),
       players: settlementPlayers,
       transfers: settlement.transfers.map((transfer) => ({
@@ -1436,7 +1674,7 @@ export class RoomsService {
         fromName: getRoomPlayerDisplayName(transfer.fromPlayer),
         toRoomPlayerId: transfer.toRoomPlayerId,
         toName: getRoomPlayerDisplayName(transfer.toPlayer),
-        amountMinor: transfer.amountMinor.toString()
+        amountChips: transfer.amountChips.toString()
       }))
     };
   }
@@ -1464,6 +1702,61 @@ function isActivePlayer(player: { status: PrismaRoomPlayerStatus }): boolean {
 
 function isRoomAdmin(role: PrismaRoomPlayerRole): boolean {
   return role === PrismaRoomPlayerRole.OWNER || role === PrismaRoomPlayerRole.ADMIN;
+}
+
+function getPlayerTotalBuyinChips(
+  room: Pick<Room, "buyInChips">,
+  player: Pick<RoomPlayer, "status" | "id">,
+  rebuySummary: RebuySummary
+): bigint {
+  return getPlayerTotalBuyinChipsFromTotals(
+    room.buyInChips,
+    shouldCountPlayerBuyIn(player),
+    rebuySummary.playerTotals.get(player.id)?.totalRebuyChips ?? 0n
+  );
+}
+
+function getPlayerTotalBuyinChipsFromTotals(
+  buyInChips: bigint,
+  shouldIncludeBuyIn: boolean,
+  totalRebuyChips: bigint
+): bigint {
+  return (shouldIncludeBuyIn ? buyInChips : 0n) + totalRebuyChips;
+}
+
+function getRoomTotalPotChips(
+  room: Pick<Room, "buyInChips"> & {
+    players: Array<Pick<RoomPlayer, "status" | "id">>;
+    id: string;
+  },
+  rebuySummary: RebuySummary
+): bigint {
+  return getRoomTotalPotChipsFromTotals(
+    room.buyInChips,
+    room.players.filter(isActivePlayer).length,
+    rebuySummary.roomTotals.get(room.id) ?? 0n
+  );
+}
+
+function getRoomTotalPotChipsFromTotals(
+  buyInChips: bigint,
+  activePlayersCount: number,
+  totalRebuyChips: bigint
+): bigint {
+  return buyInChips * BigInt(activePlayersCount) + totalRebuyChips;
+}
+
+function shouldCountPlayerBuyIn(player: Pick<RoomPlayer, "status">): boolean {
+  return (
+    player.status === PrismaRoomPlayerStatus.ACTIVE ||
+    player.status === PrismaRoomPlayerStatus.LEFT
+  );
+}
+
+function toNullableNumber(value: string): number | null {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 function getRebuySource({
@@ -1499,13 +1792,13 @@ function buildRoomInviteUrl(inviteCode: string): string {
     ? webAppUrl.slice(0, -1)
     : webAppUrl;
 
-  return `${normalizedWebAppUrl}/join/${inviteCode}`;
+  return appendWebAppCacheBuster(`${normalizedWebAppUrl}/join/${inviteCode}`);
 }
 
-function getSettlementBalanceMessage(differenceMinor: bigint): string {
-  if (differenceMinor > 0n) {
-    return "Финальных сумм введено больше, чем закупов.";
+function getSettlementBalanceMessage(differenceChips: bigint): string {
+  if (differenceChips > 0n) {
+    return "Финальных фишек указано больше, чем закупов.";
   }
 
-  return "Финальных сумм введено меньше, чем закупов.";
+  return "Финальных фишек указано меньше, чем закупов.";
 }

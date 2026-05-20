@@ -63,6 +63,16 @@ describe("RoomsController", () => {
     expect((error as ApiError).getStatus()).toBe(400);
   });
 
+  it("returns ROOM_INVALID_INPUT for malformed leave payload", () => {
+    const controller = new RoomsController(createRoomsServiceMock() as never);
+
+    const error = captureError(() => controller.leaveRoom(baseUser, "room-1", {}));
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe(ROOM_ERROR_CODES.invalidInput);
+    expect((error as ApiError).getStatus()).toBe(400);
+  });
+
   it("returns ROOM_INVALID_INPUT for malformed settlement close payload", () => {
     const controller = new RoomsController(createRoomsServiceMock() as never);
 
@@ -138,6 +148,19 @@ describe("RoomsController", () => {
     expect(roomsService.previewSettlement).not.toHaveBeenCalled();
   });
 
+  it("does not call service when leave payload is malformed", () => {
+    const roomsService = createRoomsServiceMock();
+    const controller = new RoomsController(roomsService as never);
+
+    try {
+      void controller.leaveRoom(baseUser, "room-1", {});
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+    }
+
+    expect(roomsService.leaveRoom).not.toHaveBeenCalled();
+  });
+
   it("does not call service when settlement close payload is malformed", () => {
     const roomsService = createRoomsServiceMock();
     const controller = new RoomsController(roomsService as never);
@@ -159,6 +182,8 @@ function createRoomsServiceMock() {
     getRoom: jest.fn(),
     joinRoom: jest.fn(),
     startRoom: jest.fn(),
+    leaveRoom: jest.fn(),
+    returnToRoom: jest.fn(),
     createRebuy: jest.fn(),
     cancelRebuy: jest.fn(),
     getRebuyHistory: jest.fn(),

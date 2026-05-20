@@ -8,7 +8,14 @@ type MockPrisma = {
   user: {
     findUnique: jest.Mock;
   };
+  onlinePlayerStats: {
+    findUnique: jest.Mock;
+  };
   roomPlayer: {
+    findMany: jest.Mock;
+    findFirst: jest.Mock;
+  };
+  virtualSeat: {
     findMany: jest.Mock;
     findFirst: jest.Mock;
   };
@@ -129,6 +136,7 @@ describe("PlayerStatsService", () => {
     });
     prisma.roomPlayer.findMany.mockResolvedValue([{ roomId: "shared-room" }]);
     prisma.roomPlayer.findFirst.mockResolvedValue(null);
+    prisma.virtualSeat.findMany.mockResolvedValue([]);
 
     const service = new PlayerStatsService(prisma as unknown as PrismaService);
 
@@ -141,6 +149,217 @@ describe("PlayerStatsService", () => {
       }
     });
     expect(prisma.roomPlayer.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.virtualSeat.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps recent games sorted from new to old and includes cumulative profit for chart points", async () => {
+    const prisma = createPrismaMock();
+
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-2",
+      username: "ilya",
+      firstName: "Илья"
+    });
+    prisma.roomPlayer.findMany
+      .mockResolvedValueOnce([{ roomId: "shared-room" }])
+      .mockResolvedValueOnce([
+        createClosedParticipationRecord({
+          userId: "user-2",
+          firstName: "Илья",
+          roomId: "room-newest",
+          totalBuyinMinor: 10000n,
+          netResultMinor: 3000n,
+          closedAt: new Date("2026-05-12T12:00:00.000Z")
+        }),
+        createClosedParticipationRecord({
+          userId: "user-2",
+          firstName: "Илья",
+          roomId: "room-middle",
+          totalBuyinMinor: 10000n,
+          netResultMinor: -2000n,
+          closedAt: new Date("2026-05-11T12:00:00.000Z")
+        }),
+        createClosedParticipationRecord({
+          userId: "user-2",
+          firstName: "Илья",
+          roomId: "room-oldest",
+          totalBuyinMinor: 10000n,
+          netResultMinor: 5000n,
+          closedAt: new Date("2026-05-10T12:00:00.000Z")
+        })
+      ]);
+    prisma.roomPlayer.findFirst.mockResolvedValue({ id: "shared-membership" });
+
+    const service = new PlayerStatsService(prisma as unknown as PrismaService);
+
+    const result = await service.getPlayerProfile(baseUser, "user-2");
+
+    expect(result.recentGames.map((game) => game.roomId)).toEqual([
+      "room-newest",
+      "room-middle",
+      "room-oldest"
+    ]);
+    expect(result.recentGames.map((game) => game.myNetResultMinor)).toEqual([
+      "3000",
+      "-2000",
+      "5000"
+    ]);
+    expect(result.recentGames.map((game) => game.cumulativeProfitMinor)).toEqual([
+      "6000",
+      "3000",
+      "5000"
+    ]);
+  });
+
+  it("includes existing online stats in player profile", async () => {
+    const prisma = createPrismaMock();
+
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-2",
+      username: "ilya",
+      firstName: "Илья"
+    });
+    prisma.roomPlayer.findMany
+      .mockResolvedValueOnce([{ roomId: "shared-room" }])
+      .mockResolvedValueOnce([
+        createClosedParticipationRecord({
+          userId: "user-2",
+          firstName: "Илья",
+          roomId: "shared-room",
+          totalBuyinMinor: 10000n,
+          netResultMinor: 3000n
+        })
+      ]);
+    prisma.roomPlayer.findFirst.mockResolvedValue({ id: "shared-membership" });
+    prisma.onlinePlayerStats.findUnique.mockResolvedValue({
+      userId: "user-2",
+      handsPlayed: 120,
+      handsWon: 28,
+      netChips: 450n,
+      netEstimatedMinor: 4500n,
+      bigBlindsWon: 45n,
+      bbPer100Bps: 375,
+      winRateBps: 2333,
+      avgChipsPerHand: 4n,
+      onlinePokerScore: 87
+    });
+
+    const service = new PlayerStatsService(prisma as unknown as PrismaService);
+
+    const result = await service.getPlayerProfile(baseUser, "user-2");
+
+    expect(result.onlineStats).toEqual({
+      userId: "user-2",
+      displayName: "Илья",
+      username: "ilya",
+      handsPlayed: 120,
+      handsWon: 28,
+      netChips: "450",
+      netEstimatedMinor: "4500",
+      bigBlindsWon: "45",
+      bbPer100Bps: 375,
+      winRateBps: 2333,
+      avgChipsPerHand: "4",
+      onlinePokerScore: 87
+    });
+  });
+
+  it("returns zero online stats when player has no online record", async () => {
+    const prisma = createPrismaMock();
+
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-2",
+      username: "ilya",
+      firstName: "Илья"
+    });
+    prisma.roomPlayer.findMany
+      .mockResolvedValueOnce([{ roomId: "shared-room" }])
+      .mockResolvedValueOnce([]);
+    prisma.roomPlayer.findFirst.mockResolvedValue({ id: "shared-membership" });
+    prisma.onlinePlayerStats.findUnique.mockResolvedValue(null);
+
+    const service = new PlayerStatsService(prisma as unknown as PrismaService);
+
+    const result = await service.getPlayerProfile(baseUser, "user-2");
+
+    expect(result.onlineStats).toEqual({
+      userId: "user-2",
+      displayName: "Илья",
+      username: "ilya",
+      handsPlayed: 0,
+      handsWon: 0,
+      netChips: "0",
+      netEstimatedMinor: "0",
+      bigBlindsWon: "0",
+      bbPer100Bps: 0,
+      winRateBps: 0,
+      avgChipsPerHand: "0",
+      onlinePokerScore: 0
+    });
+  });
+
+  it("allows profile access for players with a shared virtual table", async () => {
+    const prisma = createPrismaMock();
+
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-2",
+      username: "ilya",
+      firstName: "Илья"
+    });
+    prisma.roomPlayer.findMany.mockResolvedValue([]);
+    prisma.virtualSeat.findMany.mockResolvedValue([{ tableId: "table-1" }]);
+    prisma.virtualSeat.findFirst.mockResolvedValue({ id: "shared-seat" });
+    prisma.onlinePlayerStats.findUnique.mockResolvedValue(null);
+
+    const service = new PlayerStatsService(prisma as unknown as PrismaService);
+
+    const result = await service.getPlayerProfile(baseUser, "user-2");
+
+    expect(result.user.id).toBe("user-2");
+    expect(prisma.virtualSeat.findMany).toHaveBeenCalledWith({
+      where: {
+        userId: "user-1"
+      },
+      select: {
+        tableId: true
+      },
+      distinct: ["tableId"]
+    });
+    expect(prisma.virtualSeat.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: "user-2",
+        tableId: {
+          in: ["table-1"]
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+  });
+
+  it("still denies profile access when players have neither shared room nor virtual table", async () => {
+    const prisma = createPrismaMock();
+
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-2",
+      username: "ilya",
+      firstName: "Илья"
+    });
+    prisma.roomPlayer.findMany.mockResolvedValue([]);
+    prisma.virtualSeat.findMany.mockResolvedValue([]);
+
+    const service = new PlayerStatsService(prisma as unknown as PrismaService);
+
+    await expect(service.getPlayerProfile(baseUser, "user-2")).rejects.toMatchObject({
+      status: HttpStatus.FORBIDDEN,
+      response: {
+        error: {
+          code: "PLAYER_ACCESS_DENIED"
+        }
+      }
+    });
+    expect(prisma.virtualSeat.findFirst).not.toHaveBeenCalled();
   });
 });
 
@@ -149,7 +368,14 @@ function createPrismaMock(): MockPrisma {
     user: {
       findUnique: jest.fn()
     },
+    onlinePlayerStats: {
+      findUnique: jest.fn()
+    },
     roomPlayer: {
+      findMany: jest.fn(),
+      findFirst: jest.fn()
+    },
+    virtualSeat: {
       findMany: jest.fn(),
       findFirst: jest.fn()
     }
@@ -171,15 +397,19 @@ function createClosedParticipationRecord({
   netResultMinor: bigint;
   closedAt?: Date;
 }): Record<string, unknown> {
+  const chipsPerCurrencyUnit = 10;
+  const totalBuyinChips = totalBuyinMinor / BigInt(chipsPerCurrencyUnit);
+  const finalAmountMinor = totalBuyinMinor + netResultMinor;
+  const finalAmountChips = finalAmountMinor / BigInt(chipsPerCurrencyUnit);
+  const netResultChips = netResultMinor / BigInt(chipsPerCurrencyUnit);
+
   return {
     userId,
-    finalAmountMinor: totalBuyinMinor + netResultMinor,
+    finalAmountChips,
+    finalAmountMinor,
+    netResultChips,
     netResultMinor,
-    rebuyEvents: [
-      {
-        amountMinor: totalBuyinMinor
-      }
-    ],
+    rebuyEvents: [],
     user: {
       id: userId,
       username: userId,
@@ -189,6 +419,9 @@ function createClosedParticipationRecord({
       id: roomId,
       title: "Вечерняя игра",
       currency: "RUB",
+      buyInChips: totalBuyinChips,
+      rebuyChips: totalBuyinChips,
+      chipsPerCurrencyUnit,
       rebuyAmountMinor: totalBuyinMinor,
       closedAt,
       status: RoomStatus.CLOSED,

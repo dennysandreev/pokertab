@@ -26,6 +26,10 @@ export function getActivePlayers(players: RoomPlayerDto[]): RoomPlayerDto[] {
   return players.filter((player) => player.status === "ACTIVE");
 }
 
+export function getSettlementPlayers(players: RoomPlayerDto[]): RoomPlayerDto[] {
+  return players.filter((player) => player.status === "ACTIVE" || player.status === "LEFT");
+}
+
 export function getMyPlayer(
   players: RoomPlayerDto[],
   myPlayerId: string

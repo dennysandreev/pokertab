@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   APP_NAME,
   buildRoomStartParam,
+  chipsToMoneyMinor,
+  formatChips,
   formatMinorMoney,
   getInviteCodeFromStartParam,
   parseMajorMoneyToMinor
@@ -40,5 +42,15 @@ describe("shared constants", () => {
     expect(formatMinorMoney("100050", "RUB")).toBe("1\u00A0000,50 ₽");
     expect(formatMinorMoney("123456", "USD")).toBe("1\u00A0234,56 $");
     expect(formatMinorMoney("-789", "EUR")).toBe("-7,89 €");
+  });
+
+  it("formats chips with grouped thousands", () => {
+    expect(formatChips("12500")).toBe("12\u00A0500");
+    expect(formatChips(-9000n)).toBe("-9\u00A0000");
+  });
+
+  it("converts chips to minor money using chip rate", () => {
+    expect(chipsToMoneyMinor("1000", "100")).toBe("1000");
+    expect(chipsToMoneyMinor("250", "4")).toBe("6250");
   });
 });

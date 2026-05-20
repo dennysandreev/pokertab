@@ -18,7 +18,7 @@ describe("room view helpers", () => {
     ).toBe("waiting");
   });
 
-  it("routes running admins and owners to the admin surface", () => {
+  it("routes running owners to the admin surface", () => {
     expect(
       getRoomSurface({
         status: "RUNNING",
@@ -26,21 +26,24 @@ describe("room view helpers", () => {
       } satisfies Pick<RoomDetailsDto, "status" | "myRole">)
     ).toBe("active-admin");
 
-    expect(
-      getRoomSurface({
-        status: "RUNNING",
-        myRole: "ADMIN"
-      } satisfies Pick<RoomDetailsDto, "status" | "myRole">)
-    ).toBe("active-admin");
   });
 
-  it("routes running players to the player surface", () => {
+  it("routes running players to the player surface even after leaving seat", () => {
     expect(
       getRoomSurface({
         status: "RUNNING",
         myRole: "PLAYER"
       } satisfies Pick<RoomDetailsDto, "status" | "myRole">)
     ).toBe("active-player");
+  });
+
+  it("keeps running admins on admin surface even if they left the table", () => {
+    expect(
+      getRoomSurface({
+        status: "RUNNING",
+        myRole: "ADMIN"
+      } satisfies Pick<RoomDetailsDto, "status" | "myRole">)
+    ).toBe("active-admin");
   });
 
   it("routes closed rooms to the final results surface", () => {
@@ -108,9 +111,9 @@ function createPlayer(overrides: Partial<RoomPlayerDto> = {}): RoomPlayerDto {
     role: "PLAYER",
     status: "ACTIVE",
     rebuyCount: 0,
-    totalBuyinMinor: "0",
-    finalAmountMinor: null,
-    netResultMinor: null,
+    totalBuyinChips: "0",
+    finalAmountChips: null,
+    netResultChips: null,
     ...overrides
   };
 }

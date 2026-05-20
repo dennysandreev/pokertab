@@ -1,0 +1,15 @@
+export const VIRTUAL_ERROR_CODES = {
+  invalidInput: "VIRTUAL_INVALID_INPUT",
+  notFound: "VIRTUAL_NOT_FOUND",
+  forbidden: "VIRTUAL_FORBIDDEN",
+  conflict: "VIRTUAL_CONFLICT",
+  actionNotAllowed: "VIRTUAL_ACTION_NOT_ALLOWED"
+} as const;
+
+export const VIRTUAL_TABLE_TITLE_MAX_LENGTH = 80;
+export const VIRTUAL_INVITE_CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+export const VIRTUAL_INVITE_CODE_LENGTH = 8;
+export const VIRTUAL_MAX_SEATS = 9;
+export const VIRTUAL_MIN_SEATS = 2;
+export const VIRTUAL_MAX_CHIPS = 1_000_000_000n;
+export const VIRTUAL_INVITE_PATH = "/join/virtual";

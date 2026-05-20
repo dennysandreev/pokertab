@@ -10,10 +10,11 @@ import {
 } from "./settlement-view";
 
 describe("settlement view helpers", () => {
-  it("builds settlement draft only from active players", () => {
+  it("builds settlement draft from active and left players, excluding removed", () => {
     const players = [
-      createPlayer({ id: "player-1", totalBuyinMinor: "300000" }),
-      createPlayer({ id: "player-2", status: "LEFT", totalBuyinMinor: "200000" })
+      createPlayer({ id: "player-1", totalBuyinChips: "3000" }),
+      createPlayer({ id: "player-2", status: "LEFT", totalBuyinChips: "2000", finalAmountChips: "1400" }),
+      createPlayer({ id: "player-3", status: "REMOVED", totalBuyinChips: "1000", finalAmountChips: "1000" })
     ];
 
     const draftPlayers = getSettlementDraftPlayers(players, {
@@ -23,29 +24,38 @@ describe("settlement view helpers", () => {
     expect(draftPlayers).toEqual([
       expect.objectContaining({
         roomPlayerId: "player-1",
-        finalAmountMinor: "450000",
-        netResultMinor: "150000",
+        status: "ACTIVE",
+        finalAmountChips: "4500",
+        netResultChips: "1500",
+        issue: null
+      }),
+      expect.objectContaining({
+        roomPlayerId: "player-2",
+        status: "LEFT",
+        finalAmountInput: "1400",
+        finalAmountChips: "1400",
+        netResultChips: "-600",
         issue: null
       })
     ]);
   });
 
-  it("calculates totals and difference with integer minor units", () => {
+  it("calculates totals and difference with integer chip values", () => {
     const draftPlayers = getSettlementDraftPlayers(
       [
-        createPlayer({ id: "player-1", totalBuyinMinor: "300000" }),
-        createPlayer({ id: "player-2", totalBuyinMinor: "200000" })
+        createPlayer({ id: "player-1", totalBuyinChips: "3000" }),
+        createPlayer({ id: "player-2", totalBuyinChips: "2000" })
       ],
       {
-        "player-1": "4500,50",
-        "player-2": "499,50"
+        "player-1": "4500",
+        "player-2": "500"
       }
     );
 
     expect(getSettlementDraftSummary(draftPlayers)).toEqual({
-      totalBuyinsMinor: "500000",
-      totalFinalAmountMinor: "500000",
-      differenceMinor: "0",
+      totalBuyinsChips: "5000",
+      totalFinalAmountChips: "5000",
+      differenceChips: "0",
       hasMissingValues: false,
       hasInvalidValues: false,
       isBalanced: true
@@ -74,8 +84,8 @@ describe("settlement view helpers", () => {
   it("includes buyins and final amounts in the current preview key", () => {
     const draftPlayers = getSettlementDraftPlayers(
       [
-        createPlayer({ id: "player-1", totalBuyinMinor: "300000" }),
-        createPlayer({ id: "player-2", totalBuyinMinor: "200000" })
+        createPlayer({ id: "player-1", totalBuyinChips: "3000" }),
+        createPlayer({ id: "player-2", totalBuyinChips: "2000" })
       ],
       {
         "player-1": "4500",
@@ -87,29 +97,31 @@ describe("settlement view helpers", () => {
       finalAmounts: [
         {
           roomPlayerId: "player-1",
-          finalAmountMinor: "450000"
+          finalAmountChips: "4500"
         },
         {
           roomPlayerId: "player-2",
-          finalAmountMinor: "50000"
+          finalAmountChips: "500"
         }
       ]
     });
-    expect(getSettlementDraftKey(draftPlayers)).toBe("player-1:300000:450000|player-2:200000:50000");
+    expect(getSettlementDraftKey(draftPlayers)).toBe("player-1:3000:4500|player-2:2000:500");
   });
 
-  it("formats difference messages and prefilled inputs for Russian money fields", () => {
-    expect(getSettlementDifferenceMessage("1000", "RUB")).toBe(
-      "Финальных сумм получилось больше на 10 ₽. Проверьте ввод."
+  it("formats difference messages and prefilled inputs for chip fields", () => {
+    expect(getSettlementDifferenceMessage("1000")).toBe(
+      "Финальных фишек получилось больше на 1 000 фишек. Проверьте ввод."
     );
-    expect(getSettlementDifferenceMessage("-250", "RUB")).toBe(
-      "Финальных сумм пока меньше на 2,50 ₽. Проверьте ввод."
+    expect(getSettlementDifferenceMessage("-250")).toBe(
+      "Финальных фишек пока меньше на 250 фишек. Проверьте ввод."
     );
-    expect(getInitialFinalAmountInput("750050")).toBe("7500,50");
+    expect(getInitialFinalAmountInput("7500")).toBe("7500");
   });
 });
 
-function createPlayer(overrides: Partial<RoomPlayerDto> = {}): RoomPlayerDto {
+function createPlayer(
+  overrides: Partial<RoomPlayerDto & { totalBuyinChips?: string; finalAmountChips?: string | null }> = {}
+): RoomPlayerDto {
   return {
     id: "player-1",
     userId: "user-1",
@@ -117,9 +129,9 @@ function createPlayer(overrides: Partial<RoomPlayerDto> = {}): RoomPlayerDto {
     role: "PLAYER",
     status: "ACTIVE",
     rebuyCount: 0,
-    totalBuyinMinor: "100000",
-    finalAmountMinor: null,
-    netResultMinor: null,
+    totalBuyinChips: "1000",
+    finalAmountChips: null,
+    netResultChips: null,
     ...overrides
   };
 }

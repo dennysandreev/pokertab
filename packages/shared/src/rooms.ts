@@ -58,12 +58,14 @@ export type RoomListItemDto = {
   title: string;
   status: RoomStatus;
   currency: string;
-  rebuyAmountMinor: string;
+  buyInChips: string;
+  rebuyChips: string;
+  chipsPerCurrencyUnit: string;
   playersCount: number;
-  totalPotMinor: string;
-  myBuyinsMinor: string;
+  totalPotChips: string;
+  myBuyinsChips: string;
   closedAt?: string;
-  myNetResultMinor?: string;
+  myNetResultChips?: string;
 };
 
 export type RoomsListResponseDto = {
@@ -74,8 +76,9 @@ export type RoomsListResponseDto = {
 export type CreateRoomRequestDto = {
   title: string;
   currency: string;
-  rebuyAmountMinor: string;
-  startingStack: number | null;
+  buyInChips: string;
+  rebuyChips: string;
+  chipsPerCurrencyUnit: string;
   gameType: GameType;
   rebuyPermission: RebuyPermission;
 };
@@ -97,9 +100,9 @@ export type RoomPlayerDto = {
   role: RoomPlayerRole;
   status: RoomPlayerStatus;
   rebuyCount: number;
-  totalBuyinMinor: string;
-  finalAmountMinor: string | null;
-  netResultMinor: string | null;
+  totalBuyinChips: string;
+  finalAmountChips: string | null;
+  netResultChips: string | null;
 };
 
 export type RoomDetailsDto = {
@@ -107,14 +110,15 @@ export type RoomDetailsDto = {
   title: string;
   status: RoomStatus;
   currency: string;
-  rebuyAmountMinor: string;
-  startingStack: number | null;
+  buyInChips: string;
+  rebuyChips: string;
+  chipsPerCurrencyUnit: string;
   gameType: GameType;
   rebuyPermission: RebuyPermission;
   inviteCode: string;
   inviteUrl: string;
-  totalPotMinor: string;
-  myBuyinsMinor: string;
+  totalPotChips: string;
+  myBuyinsChips: string;
   playersCount: number;
   myRole: RoomPlayerRole;
   myPlayerId: string;
@@ -145,6 +149,26 @@ export type StartRoomResponseDto = {
   startedAt: string;
 };
 
+export type SubmitFinalChipsRequestDto = {
+  finalAmountChips: string;
+};
+
+export type LeaveRoomResponseDto = {
+  roomId: string;
+  playerId: string;
+  playerStatus: RoomPlayerStatus;
+  finalAmountChips: string;
+  netResultChips: string;
+};
+
+export type ReturnToRoomResponseDto = {
+  roomId: string;
+  playerId: string;
+  playerStatus: RoomPlayerStatus;
+  finalAmountChips: null;
+  netResultChips: null;
+};
+
 export type CreateRebuyRequestDto = {
   roomPlayerId: string;
   idempotencyKey: string;
@@ -154,7 +178,7 @@ export type RebuyEventDto = {
   id: string;
   roomId: string;
   roomPlayerId: string;
-  amountMinor: string;
+  amountChips: string;
   source: RebuyEventSource;
   status: RebuyEventStatus;
   createdAt: string;
@@ -162,11 +186,11 @@ export type RebuyEventDto = {
 
 export type RebuyPlayerTotalsDto = {
   rebuyCount: number;
-  totalBuyinMinor: string;
+  totalBuyinChips: string;
 };
 
 export type RebuyRoomTotalsDto = {
-  totalPotMinor: string;
+  totalPotChips: string;
 };
 
 export type CreateRebuyResponseDto = {
@@ -195,7 +219,7 @@ export type RebuyHistoryItemDto = {
   roomId: string;
   roomPlayerId: string;
   playerName: string;
-  amountMinor: string;
+  amountChips: string;
   source: RebuyEventSource;
   status: RebuyEventStatus;
   createdAt: string;
@@ -213,7 +237,7 @@ export type GetRebuyHistoryResponseDto = {
 
 export type SettlementFinalAmountInputDto = {
   roomPlayerId: string;
-  finalAmountMinor: string;
+  finalAmountChips: string;
 };
 
 export type SettlementPreviewRequestDto = {
@@ -225,9 +249,9 @@ export type CloseSettlementRequestDto = SettlementPreviewRequestDto;
 export type SettlementPlayerResultDto = {
   roomPlayerId: string;
   displayName: string;
-  totalBuyinMinor: string;
-  finalAmountMinor: string;
-  netResultMinor: string;
+  totalBuyinChips: string;
+  finalAmountChips: string;
+  netResultChips: string;
 };
 
 export type SettlementTransferDto = {
@@ -235,24 +259,24 @@ export type SettlementTransferDto = {
   fromName: string;
   toRoomPlayerId: string;
   toName: string;
-  amountMinor: string;
+  amountChips: string;
 };
 
 export type RoomSettlementDto = {
   id: string;
   status: SettlementStatus;
-  totalBuyinsMinor: string;
-  totalFinalAmountMinor: string;
-  differenceMinor: string;
+  totalBuyinsChips: string;
+  totalFinalAmountChips: string;
+  differenceChips: string;
   calculatedAt: string;
   players: SettlementPlayerResultDto[];
   transfers: SettlementTransferDto[];
 };
 
 export type SettlementPreviewResponseDto = {
-  totalBuyinsMinor: string;
-  totalFinalAmountMinor: string;
-  differenceMinor: string;
+  totalBuyinsChips: string;
+  totalFinalAmountChips: string;
+  differenceChips: string;
   players: SettlementPlayerResultDto[];
   transfers: SettlementTransferDto[];
 };
@@ -302,6 +326,43 @@ export function formatMinorMoney(minor: string, currency: string): string {
   }
 
   return `${prefix}${formattedUnits},${formattedRemainder} ${getCurrencySymbol(currencyCode)}`;
+}
+
+export function formatChips(value: string | number | bigint): string {
+  const chips = typeof value === "bigint" ? value : BigInt(value);
+  const isNegative = chips < 0n;
+  const absolute = isNegative ? chips * -1n : chips;
+  const formatted = absolute.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0");
+
+  return isNegative ? `-${formatted}` : formatted;
+}
+
+export function chipsToMoneyMinor(
+  chips: string | number | bigint,
+  chipsPerCurrencyUnit: string | number | bigint
+): string {
+  const chipAmount = typeof chips === "bigint" ? chips : BigInt(chips);
+  const rate =
+    typeof chipsPerCurrencyUnit === "bigint"
+      ? chipsPerCurrencyUnit
+      : BigInt(chipsPerCurrencyUnit);
+
+  if (rate <= 0n) {
+    throw new RangeError("chipsPerCurrencyUnit must be positive");
+  }
+
+  return ((chipAmount * 100n) / rate).toString();
+}
+
+export function formatChipsWithCurrencyApprox(
+  chips: string | number | bigint,
+  currency: string,
+  chipsPerCurrencyUnit: string | number | bigint
+): string {
+  const formattedChips = formatChips(chips);
+  const approxMoney = formatMinorMoney(chipsToMoneyMinor(chips, chipsPerCurrencyUnit), currency);
+
+  return `${formattedChips} фишек (~${approxMoney})`;
 }
 
 function getCurrencySymbol(currency: string): string {

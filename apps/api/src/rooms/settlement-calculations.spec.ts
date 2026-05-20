@@ -10,38 +10,38 @@ describe("settlement calculations", () => {
       {
         roomPlayerId: "player-a",
         displayName: "A",
-        totalBuyinMinor: 1000n,
-        finalAmountMinor: 2000n
+        totalBuyinChips: 1000n,
+        finalAmountChips: 2000n
       },
       {
         roomPlayerId: "player-b",
         displayName: "B",
-        totalBuyinMinor: 1000n,
-        finalAmountMinor: 0n
+        totalBuyinChips: 1000n,
+        finalAmountChips: 0n
       }
     ]);
 
     expect(players).toEqual([
       expect.objectContaining({
         roomPlayerId: "player-a",
-        netResultMinor: 1000n
+        netResultChips: 1000n
       }),
       expect.objectContaining({
         roomPlayerId: "player-b",
-        netResultMinor: -1000n
+        netResultChips: -1000n
       })
     ]);
     expect(validateSettlementBalance(players)).toEqual({
-      totalBuyinsMinor: 2000n,
-      totalFinalAmountMinor: 2000n,
-      differenceMinor: 0n,
+      totalBuyinsChips: 2000n,
+      totalFinalAmountChips: 2000n,
+      differenceChips: 0n,
       isBalanced: true
     });
     expect(calculateTransfers(players)).toEqual([
       {
         fromRoomPlayerId: "player-b",
         toRoomPlayerId: "player-a",
-        amountMinor: 1000n
+        amountChips: 1000n
       }
     ]);
   });
@@ -50,19 +50,19 @@ describe("settlement calculations", () => {
     const players = [
       {
         roomPlayerId: "player-a",
-        netResultMinor: 2500n
+        netResultChips: 2500n
       },
       {
         roomPlayerId: "player-b",
-        netResultMinor: 500n
+        netResultChips: 500n
       },
       {
         roomPlayerId: "player-c",
-        netResultMinor: -2000n
+        netResultChips: -2000n
       },
       {
         roomPlayerId: "player-d",
-        netResultMinor: -1000n
+        netResultChips: -1000n
       }
     ];
 
@@ -70,17 +70,17 @@ describe("settlement calculations", () => {
       {
         fromRoomPlayerId: "player-c",
         toRoomPlayerId: "player-a",
-        amountMinor: 2000n
+        amountChips: 2000n
       },
       {
         fromRoomPlayerId: "player-d",
         toRoomPlayerId: "player-a",
-        amountMinor: 500n
+        amountChips: 500n
       },
       {
         fromRoomPlayerId: "player-d",
         toRoomPlayerId: "player-b",
-        amountMinor: 500n
+        amountChips: 500n
       }
     ]);
   });
@@ -90,22 +90,22 @@ describe("settlement calculations", () => {
       calculateTransfers([
         {
           roomPlayerId: "player-a",
-          netResultMinor: 1000n
+          netResultChips: 1000n
         },
         {
           roomPlayerId: "player-b",
-          netResultMinor: -1000n
+          netResultChips: -1000n
         },
         {
           roomPlayerId: "player-c",
-          netResultMinor: 0n
+          netResultChips: 0n
         }
       ])
     ).toEqual([
       {
         fromRoomPlayerId: "player-b",
         toRoomPlayerId: "player-a",
-        amountMinor: 1000n
+        amountChips: 1000n
       }
     ]);
   });
@@ -113,19 +113,19 @@ describe("settlement calculations", () => {
   it("reports unbalanced settlement difference", () => {
     const result = validateSettlementBalance([
       {
-        totalBuyinMinor: 1000n,
-        finalAmountMinor: 1500n
+        totalBuyinChips: 1000n,
+        finalAmountChips: 1500n
       },
       {
-        totalBuyinMinor: 1000n,
-        finalAmountMinor: 400n
+        totalBuyinChips: 1000n,
+        finalAmountChips: 400n
       }
     ]);
 
     expect(result).toEqual({
-      totalBuyinsMinor: 2000n,
-      totalFinalAmountMinor: 1900n,
-      differenceMinor: -100n,
+      totalBuyinsChips: 2000n,
+      totalFinalAmountChips: 1900n,
+      differenceChips: -100n,
       isBalanced: false
     });
   });
@@ -136,8 +136,8 @@ describe("settlement calculations", () => {
         {
           roomPlayerId: "player-a",
           displayName: "A",
-          totalBuyinMinor: 1000n,
-          finalAmountMinor: -1n
+          totalBuyinChips: 1000n,
+          finalAmountChips: -1n
         }
       ])
     ).toThrow("Финальная сумма не может быть отрицательной");

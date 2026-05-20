@@ -31,8 +31,9 @@ async function main() {
     body: {
       title: roomTitle,
       currency: "RUB",
-      rebuyAmountMinor: "100000",
-      startingStack: 10000,
+      buyInChips: "10000",
+      rebuyChips: "10000",
+      chipsPerCurrencyUnit: "100",
       gameType: "SIMPLE_TRACKING",
       rebuyPermission: "PLAYER_SELF"
     }
@@ -41,6 +42,10 @@ async function main() {
   assert(createdRoom.room.title === roomTitle, "Room title mismatch after creation");
   assert(createdRoom.room.status === "WAITING", "New room should start in WAITING");
   assert(createdRoom.room.inviteCode, "Room invite code is missing");
+  assert(
+    /^[A-Z0-9]{8}$/.test(createdRoom.room.inviteCode),
+    "Room invite code should use the canonical uppercase format"
+  );
 
   logStep("Joining room as user B");
   const joinResponse = await apiRequest("/api/rooms/join", {
@@ -102,9 +107,54 @@ async function main() {
 
   assert(settledPlayerA, "Could not reload user A before settlement");
   assert(settledPlayerB, "Could not reload user B before settlement");
-  assert(settledPlayerA.totalBuyinMinor === "100000", "User A buy-in total should be 100000");
-  assert(settledPlayerB.totalBuyinMinor === "100000", "User B buy-in total should be 100000");
-  assert(roomBeforeSettlement.room.totalPotMinor === "200000", "Room total should be 200000");
+  assert(settledPlayerA.totalBuyinChips === "20000", "User A buy-in total should be 20000 chips");
+  assert(settledPlayerB.totalBuyinChips === "20000", "User B buy-in total should be 20000 chips");
+  assert(roomBeforeSettlement.room.totalPotChips === "40000", "Room total should be 40000 chips");
+
+  logStep("Leaving room as user B");
+  const leaveResponse = await apiRequest(`/api/rooms/${createdRoom.room.id}/leave`, {
+    method: "POST",
+    accessToken: sessionB.accessToken,
+    body: {
+      finalAmountChips: "17000"
+    }
+  });
+  assert(leaveResponse.roomId === createdRoom.room.id, "Leave response returned wrong room");
+  assert(leaveResponse.playerId === settledPlayerB.id, "Leave response returned wrong player");
+  assert(leaveResponse.playerStatus === "LEFT", "Leave should mark smoke user as LEFT");
+  assert(leaveResponse.finalAmountChips === "17000", "Leave should persist final chips");
+  assert(leaveResponse.netResultChips === "-3000", "Leave should persist net result");
+
+  const roomAfterLeave = await apiRequest(`/api/rooms/${createdRoom.room.id}`, {
+    accessToken: sessionB.accessToken
+  });
+  const leftPlayerB = roomAfterLeave.players.find((player) => player.userId === sessionB.user.id);
+
+  assert(roomAfterLeave.room.myPlayerStatus === "LEFT", "Leaving user should see LEFT status");
+  assert(leftPlayerB?.status === "LEFT", "Left player status should be reflected in room details");
+  assert(leftPlayerB?.finalAmountChips === "17000", "Left player final amount should stay visible");
+  assert(leftPlayerB?.netResultChips === "-3000", "Left player net result should stay visible");
+
+  logStep("Returning user B to the room");
+  const returnResponse = await apiRequest(`/api/rooms/${createdRoom.room.id}/return`, {
+    method: "POST",
+    accessToken: sessionB.accessToken
+  });
+  assert(returnResponse.roomId === createdRoom.room.id, "Return response returned wrong room");
+  assert(returnResponse.playerId === settledPlayerB.id, "Return response returned wrong player");
+  assert(returnResponse.playerStatus === "ACTIVE", "Return should reactivate smoke user");
+  assert(returnResponse.finalAmountChips === null, "Return should clear final chips");
+  assert(returnResponse.netResultChips === null, "Return should clear net result");
+
+  const roomAfterReturn = await apiRequest(`/api/rooms/${createdRoom.room.id}`, {
+    accessToken: sessionB.accessToken
+  });
+  const returnedPlayerB = roomAfterReturn.players.find((player) => player.userId === sessionB.user.id);
+
+  assert(roomAfterReturn.room.myPlayerStatus === "ACTIVE", "Returning user should see ACTIVE status");
+  assert(returnedPlayerB?.status === "ACTIVE", "Returned player should be active again");
+  assert(returnedPlayerB?.finalAmountChips === null, "Returned player final amount should be cleared");
+  assert(returnedPlayerB?.netResultChips === null, "Returned player net result should be cleared");
 
   logStep("Previewing settlement");
   const settlementPreview = await apiRequest(
@@ -114,19 +164,19 @@ async function main() {
       accessToken: sessionA.accessToken,
       body: {
         finalAmounts: [
-          { roomPlayerId: settledPlayerA.id, finalAmountMinor: "150000" },
-          { roomPlayerId: settledPlayerB.id, finalAmountMinor: "50000" }
+          { roomPlayerId: settledPlayerA.id, finalAmountChips: "30000" },
+          { roomPlayerId: settledPlayerB.id, finalAmountChips: "10000" }
         ]
       }
     }
   );
-  assert(settlementPreview.totalBuyinsMinor === "200000", "Settlement preview buy-ins mismatch");
-  assert(settlementPreview.totalFinalAmountMinor === "200000", "Settlement preview final total mismatch");
-  assert(settlementPreview.differenceMinor === "0", "Settlement preview should be balanced");
+  assert(settlementPreview.totalBuyinsChips === "40000", "Settlement preview buy-ins mismatch");
+  assert(settlementPreview.totalFinalAmountChips === "40000", "Settlement preview final total mismatch");
+  assert(settlementPreview.differenceChips === "0", "Settlement preview should be balanced");
   assert(settlementPreview.transfers.length === 1, "Balanced two-player settlement should have one transfer");
 
   const transfer = settlementPreview.transfers[0];
-  assert(transfer.amountMinor === "50000", "Settlement transfer amount should be 50000");
+  assert(transfer.amountChips === "10000", "Settlement transfer amount should be 10000 chips");
   assert(transfer.fromRoomPlayerId === settledPlayerB.id, "Settlement should transfer from user B");
   assert(transfer.toRoomPlayerId === settledPlayerA.id, "Settlement should transfer to user A");
 
@@ -136,8 +186,8 @@ async function main() {
     accessToken: sessionA.accessToken,
     body: {
       finalAmounts: [
-        { roomPlayerId: settledPlayerA.id, finalAmountMinor: "150000" },
-        { roomPlayerId: settledPlayerB.id, finalAmountMinor: "50000" }
+        { roomPlayerId: settledPlayerA.id, finalAmountChips: "30000" },
+        { roomPlayerId: settledPlayerB.id, finalAmountChips: "10000" }
       ]
     }
   });
@@ -152,15 +202,15 @@ async function main() {
   assert(closedRoom.room.status === "CLOSED", "Closed room should return CLOSED status");
   assert(closedRoom.settlement?.id === closedSettlement.settlementId, "Closed room settlement mismatch");
   assert(closedRoom.settlement?.status === "CLOSED", "Closed room settlement should be CLOSED");
-  assert(closedRoom.settlement?.differenceMinor === "0", "Closed room settlement should stay balanced");
+  assert(closedRoom.settlement?.differenceChips === "0", "Closed room settlement should stay balanced");
 
   const closedPlayerA = closedRoom.players.find((player) => player.userId === sessionA.user.id);
   const closedPlayerB = closedRoom.players.find((player) => player.userId === sessionB.user.id);
 
-  assert(closedPlayerA?.finalAmountMinor === "150000", "User A final amount was not saved");
-  assert(closedPlayerA?.netResultMinor === "50000", "User A net result should be 50000");
-  assert(closedPlayerB?.finalAmountMinor === "50000", "User B final amount was not saved");
-  assert(closedPlayerB?.netResultMinor === "-50000", "User B net result should be -50000");
+  assert(closedPlayerA?.finalAmountChips === "30000", "User A final amount was not saved");
+  assert(closedPlayerA?.netResultChips === "10000", "User A net result should be 10000 chips");
+  assert(closedPlayerB?.finalAmountChips === "10000", "User B final amount was not saved");
+  assert(closedPlayerB?.netResultChips === "-10000", "User B net result should be -10000 chips");
 
   logStep("Fetching leaderboard and profile");
   const leaderboardAll = await apiRequest("/api/leaderboard?scope=all&period=all-time&limit=20", {
@@ -188,8 +238,8 @@ async function main() {
   assert(allEntryA, "All-time leaderboard should include user A");
   assert(allEntryB, "All-time leaderboard should include user B");
   assert(allEntryA.rank < allEntryB.rank, "User A should rank above user B after the smoke game");
-  assert(allEntryA.totalProfitMinor === "50000", "User A leaderboard profit should be 50000");
-  assert(allEntryB.totalProfitMinor === "-50000", "User B leaderboard profit should be -50000");
+  assert(allEntryA.totalProfitMinor === "10000", "User A leaderboard profit should be 10000");
+  assert(allEntryB.totalProfitMinor === "-10000", "User B leaderboard profit should be -10000");
   assert(playedWithMeEntryA, "Played-with-me leaderboard should include user A");
   assert(playedWithMeEntryB, "Played-with-me leaderboard should include user B");
   assert(
@@ -198,9 +248,15 @@ async function main() {
   );
   assert(profileB.user.id === sessionB.user.id, "Profile response returned the wrong player");
   assert(profileB.stats.gamesCount === 1, "User B profile should show one game");
-  assert(profileB.stats.totalBuyinsMinor === "100000", "User B profile buy-ins should be 100000");
-  assert(profileB.stats.totalProfitMinor === "-50000", "User B profile profit should be -50000");
-  assert(profileB.recentGames.some((game) => game.roomId === createdRoom.room.id), "User B recent games should include the smoke room");
+  assert(profileB.stats.totalBuyinsMinor === "20000", "User B profile buy-ins should be 20000");
+  assert(profileB.stats.totalProfitMinor === "-10000", "User B profile profit should be -10000");
+  const recentSmokeGame = profileB.recentGames.find((game) => game.roomId === createdRoom.room.id);
+  assert(recentSmokeGame, "User B recent games should include the smoke room");
+  assert(recentSmokeGame.myNetResultMinor === "-10000", "Smoke profile game should expose net result");
+  assert(
+    recentSmokeGame.cumulativeProfitMinor === "-10000",
+    "Smoke profile game should expose cumulative profit"
+  );
 
   console.log(`Smoke MVP flow passed for room ${createdRoom.room.id}.`);
 }

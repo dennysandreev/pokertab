@@ -1,3 +1,5 @@
+import type { VirtualOnlineStatsDto } from "./virtual.js";
+
 export const LEADERBOARD_SCOPES = ["all", "played-with-me"] as const;
 
 export type LeaderboardScope = (typeof LEADERBOARD_SCOPES)[number];
@@ -57,6 +59,7 @@ export type RecentPlayerGameDto = {
   status: "CLOSED";
   closedAt: string;
   myNetResultMinor: string;
+  cumulativeProfitMinor: string;
   playersCount: number;
   currency: string;
 };
@@ -64,5 +67,6 @@ export type RecentPlayerGameDto = {
 export type GetPlayerProfileResponseDto = {
   user: PlayerProfileUserDto;
   stats: PlayerProfileStatsDto;
+  onlineStats: VirtualOnlineStatsDto;
   recentGames: RecentPlayerGameDto[];
 };

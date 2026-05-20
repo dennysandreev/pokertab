@@ -9,6 +9,7 @@ COPY apps/api/package.json apps/api/package.json
 COPY apps/bot/package.json apps/bot/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/config/package.json packages/config/package.json
+COPY packages/poker-engine/package.json packages/poker-engine/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
 RUN corepack pnpm install --frozen-lockfile

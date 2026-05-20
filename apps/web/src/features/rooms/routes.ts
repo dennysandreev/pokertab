@@ -6,6 +6,14 @@ export function getLeaderboardRoute(): string {
   return "/leaderboard";
 }
 
+export function getGamesRoute(): string {
+  return "/games";
+}
+
+export function getClubRoute(): string {
+  return "/club";
+}
+
 export function getPlayerRoute(userId: string): string {
   return `/players/${userId}`;
 }
@@ -16,6 +24,10 @@ export function getCreateRoomRoute(): string {
 
 export function getRoomRoute(roomId: string): string {
   return `/rooms/${roomId}`;
+}
+
+export function getJoinRoute(): string {
+  return "/join";
 }
 
 export function getJoinRoomRoute(inviteCode: string): string {

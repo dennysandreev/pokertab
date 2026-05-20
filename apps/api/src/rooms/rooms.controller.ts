@@ -7,6 +7,8 @@ import type {
   GetRebuyHistoryResponseDto,
   GetRoomResponseDto,
   JoinRoomResponseDto,
+  LeaveRoomResponseDto,
+  ReturnToRoomResponseDto,
   RoomsListResponseDto,
   SettlementPreviewResponseDto,
   StartRoomResponseDto,
@@ -20,6 +22,7 @@ import {
   normalizeCreateRebuyRequest,
   normalizeCreateRoomRequest,
   normalizeJoinRoomRequest,
+  normalizeSubmitFinalChipsRequest,
   normalizeSettlementPreviewRequest
 } from "./rooms.request";
 import { RoomsService } from "./rooms.service";
@@ -64,6 +67,23 @@ export class RoomsController {
     @Param("roomId") roomId: string
   ): Promise<StartRoomResponseDto> {
     return this.roomsService.startRoom(user, roomId);
+  }
+
+  @Post(":roomId/leave")
+  leaveRoom(
+    @CurrentUser() user: UserDto,
+    @Param("roomId") roomId: string,
+    @Body() body: unknown
+  ): Promise<LeaveRoomResponseDto> {
+    return this.roomsService.leaveRoom(user, roomId, normalizeSubmitFinalChipsRequest(body));
+  }
+
+  @Post(":roomId/return")
+  returnToRoom(
+    @CurrentUser() user: UserDto,
+    @Param("roomId") roomId: string
+  ): Promise<ReturnToRoomResponseDto> {
+    return this.roomsService.returnToRoom(user, roomId);
   }
 
   @Post(":roomId/rebuys")

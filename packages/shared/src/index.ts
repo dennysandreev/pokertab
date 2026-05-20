@@ -5,3 +5,4 @@ export * from "./auth.js";
 export * from "./leaderboard.js";
 export * from "./rooms.js";
 export * from "./telegram.js";
+export * from "./virtual.js";

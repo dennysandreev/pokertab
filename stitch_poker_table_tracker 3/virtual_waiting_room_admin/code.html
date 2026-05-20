@@ -1,0 +1,262 @@
+<html class="dark"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary": "#4edea3",
+                        "inverse-surface": "#e5e2e1",
+                        "inverse-on-surface": "#313030",
+                        "tertiary": "#ffffff",
+                        "on-tertiary-container": "#636565",
+                        "surface-container": "#201f1f",
+                        "secondary-fixed-dim": "#4edea3",
+                        "surface-container-high": "#2a2a2a",
+                        "tertiary-fixed": "#e2e2e2",
+                        "error-container": "#93000a",
+                        "on-secondary": "#003824",
+                        "surface-container-lowest": "#0e0e0e",
+                        "primary-fixed": "#e2e2e2",
+                        "on-secondary-fixed-variant": "#005236",
+                        "on-secondary-container": "#00311f",
+                        "surface-tint": "#c6c6c7",
+                        "surface-container-low": "#1c1b1b",
+                        "primary-fixed-dim": "#c6c6c7",
+                        "on-tertiary": "#2f3131",
+                        "on-background": "#e5e2e1",
+                        "on-primary-container": "#636565",
+                        "secondary-fixed": "#6ffbbe",
+                        "secondary-container": "#00a572",
+                        "on-surface-variant": "#c4c7c8",
+                        "on-secondary-fixed": "#002113",
+                        "on-surface": "#e5e2e1",
+                        "tertiary-container": "#e2e2e2",
+                        "surface-container-highest": "#353434",
+                        "on-primary-fixed": "#1a1c1c",
+                        "background": "#141313",
+                        "surface-variant": "#353434",
+                        "primary": "#ffffff",
+                        "error": "#ffb4ab",
+                        "surface-dim": "#141313",
+                        "outline": "#8e9192",
+                        "on-primary-fixed-variant": "#454747",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "on-error-container": "#ffdad6",
+                        "outline-variant": "#444748",
+                        "on-error": "#690005",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "on-tertiary": "#2f3131",
+                        "primary-container": "#e2e2e2",
+                        "surface": "#141313",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "surface-bright": "#3a3939",
+                        "inverse-primary": "#5d5f5f"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "8px",
+                        "md": "16px",
+                        "xl": "32px",
+                        "sm": "12px",
+                        "safe-area-inset": "16px",
+                        "lg": "24px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Inter"],
+                        "display-lg": ["Hanken Grotesk"],
+                        "body-sm": ["Inter"],
+                        "title-sm": ["Inter"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "headline-md-mobile": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md min-h-screen pb-32">
+<!-- TopAppBar Section -->
+<header class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-md h-12 bg-surface/80 backdrop-blur-md border-b border-white/10">
+<div class="flex items-center gap-xs">
+<span class="font-headline-md-mobile text-headline-md-mobile font-extrabold text-on-surface">Poker Table</span>
+</div>
+<div class="flex items-center gap-sm">
+<button class="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container hover:bg-surface-container-high transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined text-secondary text-[20px]" data-icon="settings">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center border border-white/10 overflow-hidden">
+<img alt="User" class="w-full h-full object-cover" data-alt="A professional close-up profile avatar of a sophisticated poker player in a minimalist setting. The character exudes focus and calm with soft cinematic lighting. The aesthetic is modern and high-end, utilizing a palette of deep blacks and sharp emerald accents against a blurred dark background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAndiC4ovaxvYVgg8GDnK6D1IRqutNOKC7ParSfcmphwE7fEoLowv7rBWR_j_zroYIro3ELT1D3NthuVfVLtNM7e7zUigO_Row_shcv9KAkwYYJAR-m2uoT1Pr88nZbq7czEK6mZBLPi6RFa0noZjmApi7sQQyFiQualQXog4m8QdvISdv7AxJwJFo_C_IGI2F8LUM85XfMSB2naIatMBaxonMANR4KRWePX7ZeTieJgA0HGPKJSUyGvEfF25yl6XMFI4wt1qOvlHk"/>
+</div>
+</div>
+</header>
+<main class="pt-16 px-md space-y-lg max-w-md mx-auto">
+<!-- Hero Section: Table Identity -->
+<section class="space-y-sm">
+<div class="flex justify-between items-start">
+<div class="space-y-base">
+<h1 class="font-headline-md text-headline-md-mobile font-bold text-on-surface">Poker Weekend</h1>
+<div class="flex items-center gap-xs px-sm py-base bg-surface-container-low border border-white/5 rounded-full w-fit">
+<span class="font-label-caps text-label-caps text-on-surface-variant">ROOM ID: 2849</span>
+<button class="flex items-center text-secondary active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[16px]" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-secondary uppercase tracking-widest">Waiting for players</span>
+<p class="font-title-sm text-title-sm text-on-surface">4 / 9</p>
+</div>
+</div>
+<!-- Game Settings Card -->
+<div class="glass-card rounded-xl p-md grid grid-cols-2 gap-md">
+<div class="space-y-base">
+<span class="font-label-caps text-label-caps text-on-surface-variant block">STARTING STACK</span>
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-secondary text-[20px]" data-icon="payments">payments</span>
+<span class="font-title-sm text-title-sm text-on-surface">10,000</span>
+</div>
+</div>
+<div class="space-y-base text-right">
+<span class="font-label-caps text-label-caps text-on-surface-variant block">BLINDS</span>
+<div class="flex items-center justify-end gap-xs">
+<span class="font-title-sm text-title-sm text-on-surface">50 / 100</span>
+<span class="material-symbols-outlined text-secondary text-[20px]" data-icon="monitoring">monitoring</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Player List Section -->
+<section class="space-y-md">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant">JOINED PLAYERS</h2>
+<div class="space-y-sm">
+<!-- Player: Denis (Admin) -->
+<div class="glass-card rounded-xl p-sm flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="relative">
+<div class="w-12 h-12 rounded-full border border-secondary/30 p-[2px]">
+<img class="w-full h-full rounded-full object-cover" data-alt="A stylized portrait of an professional analytical gamer with a focused expression. The lighting is low-key and dramatic with green rim-lighting. The background is a sophisticated deep charcoal with subtle glassmorphic textures. 4k resolution, high-end fintech aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9gc0E7HiIqtWORg3JN_0jQ4xRl4dOp3Fs20XUbmwjuDI2xVh01P2CRt-EwX-6WV0xduDr94B2DKnIYs4KhqriYxyITVTCgLfEoh-FQ0XdHS-yAxwm2UZElcoXp0mxAYco-nSFZDxWKW74swxus5BKKGsodl0sFGLrFcp95WrOlG1BRPLcV2lsk553LPn5TEBjucLuvFAzmNhzfFb5cLHzYJYsAXVxHennR2ziYBZZcHI7TNU5awy76ErRqU_CgtOWA5bmxnPvkw4"/>
+</div>
+<span class="absolute -bottom-1 -right-1 bg-secondary text-on-secondary text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase">Admin</span>
+</div>
+<div>
+<p class="font-title-sm text-body-md font-bold text-on-surface">Denis</p>
+<span class="font-label-caps text-[10px] text-secondary">READY</span>
+</div>
+</div>
+<div class="flex items-center gap-xs px-sm py-1 bg-secondary/10 rounded-full">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary"></div>
+<span class="text-[10px] text-secondary font-bold">HOST</span>
+</div>
+</div>
+<!-- Player: Alexey -->
+<div class="glass-card rounded-xl p-sm flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-full border border-white/10 p-[2px]">
+<img class="w-full h-full rounded-full object-cover" data-alt="Minimalist abstract representation of a player avatar. Clean lines, dark color palette with subtle emerald green highlights. Professional and analytical tone. High contrast lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBArOsItMCdJl4xot1Q4FbWxVZm9aRlRFkxOIv3pUIKWM1s1TXuxY_98Sbf_6jZrJk_k5BW6Q6bkd4eYESmROfVo-z5Kn0PEDOWWiCjCcbbG9WJeyscx9i6E9CwuKmNjAAoAlY5jlE5q9OD2yxUvUnakDGzAF1uREHOiYTMPv1ilxEQYnTpJ7W5Dlbi05wozPMmz5cb5R-2jEJxMAn2px4_R6mrGcdhTpIthG8MqSeW1ybMcOAKcZz2g1RKIek9baHQD647ypZbMKc"/>
+</div>
+<div>
+<p class="font-title-sm text-body-md font-bold text-on-surface">Alexey</p>
+<span class="font-label-caps text-[10px] text-secondary">READY</span>
+</div>
+</div>
+</div>
+<!-- Player: Ilya -->
+<div class="glass-card rounded-xl p-sm flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-full border border-white/10 p-[2px]">
+<img class="w-full h-full rounded-full object-cover" data-alt="Minimalist abstract representation of a player avatar. Clean lines, dark color palette with subtle emerald green highlights. Professional and analytical tone. High contrast lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-Rro44EfseM7drVbfH5qPSW_3Z9-GJc0S9xV5DnPh8j4WQaHnMXg2tHRCQ4lllgUIL-4AtBPMAbP6RB4u3-DBBaXpkjofHKTKeO2tLgr0umQPCZsWFxN0HuKJWDau4OaO3ZItEhoj5fOI-_-xCYWmTPwDeZCklLVJ8XK-YRDOUYi6ISk2sOtOrVlREtGoCWdLS4dHNlsjU4k0e9k6SYH3sQDQMNYbAKo6gitkc3dU45Atc2V9JBTNc989UBK34GxZ0WSzOpiJxOA"/>
+</div>
+<div>
+<p class="font-title-sm text-body-md font-bold text-on-surface">Ilya</p>
+<span class="font-label-caps text-[10px] text-secondary">READY</span>
+</div>
+</div>
+</div>
+<!-- Player: Nikita -->
+<div class="glass-card rounded-xl p-sm flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-full border border-white/10 p-[2px]">
+<img class="w-full h-full rounded-full object-cover" data-alt="Minimalist abstract representation of a player avatar. Clean lines, dark color palette with subtle emerald green highlights. Professional and analytical tone. High contrast lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD2mCTmqrjZOCn7DDxzZkGCk6VsqRC1zngMf9mcqpkdBu4lCdBxJjmnHD6Ng1_KtCaQDwdZrgknLW4mkNEMrgWlXnHRZT3bI3wWAw-yPwgngaL_Oa2wzXtN4lVFARRMekiyqLWAYhiB3kQUMB0WlVpM6dVByEJmLIPxFvIcnmQUKxH1JuyFlwTEBuuZwxLg4MKdUF-IeUDyKBh_LY-XUag6bCQh2MoaDOU_KXVKVs2uC0oQRQ1LGDIR_4oCvgJf1QKSTE5Ql7zDBj8"/>
+</div>
+<div>
+<p class="font-title-sm text-body-md font-bold text-on-surface">Nikita</p>
+<span class="font-label-caps text-[10px] text-secondary">READY</span>
+</div>
+</div>
+</div>
+<!-- Empty Slots Placeholder -->
+<div class="border-2 border-dashed border-white/5 rounded-xl p-md flex flex-col items-center justify-center space-y-xs opacity-50">
+<span class="material-symbols-outlined text-on-surface-variant text-[24px]" data-icon="person_add">person_add</span>
+<p class="font-label-caps text-label-caps text-on-surface-variant">WAITING FOR 5 MORE...</p>
+</div>
+</div>
+</section>
+<!-- Action Area -->
+<section class="space-y-md">
+<button class="w-full h-14 bg-secondary text-on-secondary font-bold rounded-xl flex items-center justify-center gap-xs active:scale-95 transition-transform duration-200">
+<span class="material-symbols-outlined" data-icon="play_arrow" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+<span class="font-title-sm">Start Game</span>
+</button>
+<button class="w-full h-14 bg-surface-container-high border border-white/10 text-on-surface font-semibold rounded-xl flex items-center justify-center gap-xs active:scale-95 transition-transform duration-200">
+<span class="material-symbols-outlined text-[#24A1DE]" data-icon="send">send</span>
+<span class="font-title-sm">Invite via Telegram</span>
+</button>
+</section>
+</main>
+<!-- BottomNavBar Section -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-md pb-safe-area-inset pt-xs bg-surface-container/90 backdrop-blur-xl border-t border-white/5 rounded-t-xl">
+<div class="flex flex-col items-center justify-center text-secondary font-bold transition-colors">
+<span class="material-symbols-outlined text-[24px]" data-icon="home" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="font-label-caps text-label-caps">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[24px]" data-icon="casino">casino</span>
+<span class="font-label-caps text-label-caps">Games</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[24px]" data-icon="leaderboard">leaderboard</span>
+<span class="font-label-caps text-label-caps">Ranking</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[24px]" data-icon="person">person</span>
+<span class="font-label-caps text-label-caps">Profile</span>
+</div>
+</nav>
+</body></html>

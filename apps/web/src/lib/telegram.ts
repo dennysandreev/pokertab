@@ -35,6 +35,11 @@ export type TelegramLaunchData = {
   inviteCode: string | null;
 };
 
+const virtualStartParamPrefixes = ["virtual_table_", "virtual-table_", "virtual_", "poker_"] as const;
+
+const telegramLaunchWaitIntervalMs = 50;
+const telegramLaunchWaitTimeoutMs = 1500;
+
 export function getTelegramBackFallbackPath(pathname: string): string {
   if (/^\/players\/[^/]+$/.test(pathname)) {
     return "/leaderboard";
@@ -57,6 +62,44 @@ export function readTelegramLaunchData(
     startParam,
     inviteCode: getInviteCodeFromStartParam(startParam)
   };
+}
+
+export async function waitForTelegramLaunchData(
+  source: TelegramWindow | undefined = globalThis as TelegramWindow | undefined,
+  timeoutMs = telegramLaunchWaitTimeoutMs
+): Promise<TelegramLaunchData> {
+  const startedAt = Date.now();
+
+  return new Promise((resolve) => {
+    const readLaunchData = (): void => {
+      const launchData = readTelegramLaunchData(source);
+
+      if (launchData.initData || Date.now() - startedAt >= timeoutMs) {
+        resolve(launchData);
+        return;
+      }
+
+      window.setTimeout(readLaunchData, telegramLaunchWaitIntervalMs);
+    };
+
+    readLaunchData();
+  });
+}
+
+export function getVirtualInviteCodeFromStartParam(
+  value: string | null | undefined
+): string | null {
+  const normalized = normalizeValue(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const matchedPrefix = virtualStartParamPrefixes.find(
+    (prefix) => normalized.startsWith(prefix) && normalized.length > prefix.length
+  );
+
+  return matchedPrefix ? normalized.slice(matchedPrefix.length).toUpperCase() : null;
 }
 
 export function initializeTelegramWebApp(

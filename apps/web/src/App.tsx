@@ -1,17 +1,21 @@
 import type { JSX } from "react";
-import type { Dispatch, FormEvent, ReactNode, SetStateAction } from "react";
-import { useEffect, useState } from "react";
+import type { Dispatch, FormEvent, PointerEvent as ReactPointerEvent, ReactNode, SetStateAction } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type {
   GetLeaderboardResponseDto,
   GetPlayerProfileResponseDto,
   GetRoomResponseDto,
+  GetVirtualLeaderboardResponseDto,
+  GetVirtualPlayerProfileResponseDto,
   RebuyHistoryItemDto,
   RoomPlayerDto,
   RoomsListResponseDto,
-  SettlementPreviewResponseDto
+  SettlementPreviewResponseDto,
+  SubmitFinalChipsRequestDto
 } from "@pokertable/shared";
-import { formatMinorMoney } from "@pokertable/shared";
-import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { chipsToMoneyMinor, formatChips, formatChipsWithCurrencyApprox, formatMinorMoney } from "@pokertable/shared";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import type { NavigateFunction } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   ApiRequestError,
@@ -21,16 +25,21 @@ import {
   createRoom,
   getLeaderboard,
   getPlayerProfile,
+  getVirtualLeaderboard,
+  getVirtualPlayerProfile,
   getRebuyHistory,
   getRoom,
   getRooms,
   joinRoom,
+  leaveRoom,
   previewSettlement,
+  returnToRoom,
   startRoom
 } from "@/lib/api";
 import {
   canUseBrowserBack,
   getTelegramBackFallbackPath,
+  getVirtualInviteCodeFromStartParam,
   hideTelegramBackButton,
   offTelegramBackButtonClick,
   onTelegramBackButtonClick,
@@ -61,8 +70,11 @@ import {
   WaitingRoom
 } from "./features/rooms/room-screens";
 import {
+  getClubRoute,
   getCreateRoomRoute,
+  getGamesRoute,
   getHomeRoute,
+  getJoinRoute,
   getJoinRoomRoute,
   getLeaderboardRoute,
   getPlayerRoute,
@@ -70,8 +82,9 @@ import {
 } from "./features/rooms/routes";
 import {
   canSelfRebuy,
-  getActivePlayers,
+  getMyPlayer,
   getRoomSurface,
+  getSettlementPlayers,
   getSelfRebuyHint
 } from "./features/rooms/room-view";
 import {
@@ -81,6 +94,27 @@ import {
   getSettlementDraftPlayers,
   getSettlementDraftSummary
 } from "./features/rooms/settlement-view";
+import {
+  CreateVirtualTableContainer,
+  JoinVirtualTableContainer,
+  VirtualHandHistoryDetailContainer,
+  VirtualLeaderboardContainer,
+  VirtualLobbyContainer,
+  VirtualStatsContainer,
+  VirtualTableContainer,
+  VirtualTableHistoryContainer
+} from "./features/virtual/virtual-containers";
+import { VirtualTablesProvider } from "./features/virtual/virtual-data";
+import {
+  getCreateVirtualTableRoute,
+  getJoinVirtualTableInviteRoute,
+  getJoinVirtualTableRoute,
+  getVirtualLeaderboardRoute,
+  getVirtualLobbyRoute,
+  getVirtualStatsRoute,
+  getVirtualTableHistoryRoute,
+  getVirtualTableRoute
+} from "./features/virtual/routes";
 import { cn } from "./lib/utils";
 
 type LoadState<T> =
@@ -106,7 +140,7 @@ type RoomConfirmationState =
       idempotencyKey: string;
       roomPlayerId: string;
       playerName: string;
-      amountMinor: string;
+      amountChips: string;
       isSelf: boolean;
     }
   | {
@@ -114,10 +148,17 @@ type RoomConfirmationState =
       idempotencyKey: string;
       rebuyId: string;
       playerName: string;
-      amountMinor: string;
+      amountChips: string;
     };
 
 type RoomMode = "overview" | "settlement";
+type LeaderboardMode = "offline" | "online";
+type ProfileMode = LeaderboardMode;
+
+type LeaveDialogState = {
+  finalAmountInput: string;
+  errorMessage: string | null;
+};
 
 type SettlementPreviewState =
   | {
@@ -139,8 +180,14 @@ type SettlementPreviewState =
       draftKey: string | null;
     };
 
+type RoomsListContextValue = {
+  roomsState: LoadState<RoomsListResponseDto>;
+  refreshRooms: () => Promise<void>;
+};
+
 const cardClassName = "glass-card rounded-2xl bg-card p-4 shadow-panel";
 const mutedCardClassName = "glass-card rounded-2xl bg-white/[0.02] p-4";
+const modeToggleClassName = "rounded-2xl border border-white/8 bg-white/[0.025] p-1.5";
 const inputClassName =
   "mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-surfaceHigher px-4 text-sm text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 const labelClassName = "text-sm font-medium text-foreground";
@@ -148,52 +195,322 @@ const secondaryButtonClassName =
   "border border-white/10 bg-surfaceHigh text-foreground shadow-none hover:bg-surfaceHigher";
 const tertiaryButtonClassName =
   "border border-white/10 bg-transparent text-foreground shadow-none hover:bg-white/[0.03]";
+const appHeaderTopPadding = "calc(env(safe-area-inset-top) + 1.25rem)";
+const appMainTopPadding = "calc(env(safe-area-inset-top) + 7.25rem)";
+const swipeEdgeWidth = 32;
+const swipeBackDistance = 72;
+const splashMinDurationMs = 700;
+const splashMaxDurationMs = 5000;
+const pokerTableLogoPath = "/poker-table-logo.svg";
 
 export default function App(): JSX.Element {
   return (
-    <div className="relative min-h-[100dvh] overflow-x-hidden bg-surface text-foreground">
+    <RoomsListProvider>
+      <VirtualTablesProvider>
+        <AppShell />
+      </VirtualTablesProvider>
+    </RoomsListProvider>
+  );
+}
+
+function AppShell(): JSX.Element {
+  const { state } = useSession();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const swipeStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+  const splashStartedAtRef = useRef(Date.now());
+  const [showSplash, setShowSplash] = useState(true);
+  const canSwipeBack = location.pathname !== getHomeRoute();
+  const isJoinRoute = isJoinRoutePath(location.pathname);
+  const isVirtualTableFullscreen = isVirtualTableFullscreenRoute(location.pathname);
+
+  useEffect(() => {
+    const maxDurationTimeoutId = window.setTimeout(
+      () => setShowSplash(false),
+      splashMaxDurationMs
+    );
+
+    return () => {
+      window.clearTimeout(maxDurationTimeoutId);
+    };
+  }, []);
+
+  useEffect(() => {
+    const isBootstrapping = state.status === "idle" || state.status === "loading";
+
+    if (isBootstrapping) {
+      return;
+    }
+
+    const elapsed = Date.now() - splashStartedAtRef.current;
+    const remaining = Math.max(0, splashMinDurationMs - elapsed);
+    const timeoutId = window.setTimeout(() => setShowSplash(false), remaining);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [state.status]);
+
+  const handleBackNavigation = useCallback((): void => {
+    navigateBack(navigate, location.pathname);
+  }, [location.pathname, navigate]);
+
+  function resetSwipe(): void {
+    swipeStateRef.current = null;
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (!canSwipeBack || event.pointerType === "mouse" || event.clientX > swipeEdgeWidth) {
+      return;
+    }
+
+    swipeStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY
+    };
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
+    const swipeState = swipeStateRef.current;
+
+    if (!swipeState || swipeState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - swipeState.startX;
+    const deltaY = event.clientY - swipeState.startY;
+
+    if (Math.abs(deltaY) > 24 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      resetSwipe();
+      return;
+    }
+
+    if (deltaX < 0) {
+      return;
+    }
+
+    if (deltaX >= swipeBackDistance && Math.abs(deltaX) > Math.abs(deltaY) * 1.4) {
+      resetSwipe();
+      handleBackNavigation();
+    }
+  }
+
+  return (
+    <div
+      className="relative min-h-[100dvh] overflow-x-hidden bg-surface text-foreground"
+      onPointerCancel={resetSwipe}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={resetSwipe}
+    >
       <div className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[28rem] bg-[radial-gradient(circle_at_top,rgba(78,222,163,0.11),transparent_56%)]" />
       <div className="pointer-events-none fixed inset-y-0 right-[-7rem] z-0 w-[16rem] bg-[radial-gradient(circle,rgba(78,222,163,0.06),transparent_62%)] blur-3xl" />
       <LaunchInviteRedirect />
       <TelegramBackButtonSync />
-      <AppChrome />
+      {isVirtualTableFullscreen ? null : <AppChrome />}
       <main
-        className="relative z-10 flex w-full flex-col gap-5 px-4"
+        className={cn(
+          "relative z-10 flex w-full flex-col",
+          isVirtualTableFullscreen ? "gap-0 px-0" : "gap-5 px-4"
+        )}
         style={{
-          paddingTop: "calc(env(safe-area-inset-top) + 5.75rem)",
-          paddingBottom: "calc(env(safe-area-inset-bottom) + 6.5rem)",
-          minHeight: "100dvh"
+          paddingTop: isVirtualTableFullscreen ? "0" : appMainTopPadding,
+          paddingBottom: isVirtualTableFullscreen
+            ? "0"
+            : isJoinRoute
+              ? "calc(env(safe-area-inset-bottom) + 1.5rem)"
+              : "calc(env(safe-area-inset-bottom) + 6.5rem)",
+          minHeight: "100dvh",
+          height: isVirtualTableFullscreen ? "100dvh" : undefined
         }}
       >
         <Routes>
           <Route path={getHomeRoute()} element={<HomeScreen />} />
+          <Route path={getGamesRoute()} element={<GamesScreen />} />
+          <Route path={getClubRoute()} element={<ClubScreen />} />
+          <Route path={getVirtualLobbyRoute()} element={<VirtualLobbyContainer />} />
+          <Route path={getCreateVirtualTableRoute()} element={<CreateVirtualTableContainer />} />
+          <Route path={getJoinVirtualTableRoute()} element={<JoinVirtualTableContainer />} />
+          <Route path="/poker/join/:inviteCode" element={<JoinVirtualTableContainer />} />
+          <Route path={getVirtualTableRoute(":tableId")} element={<VirtualTableContainer />} />
+          <Route path={getVirtualTableHistoryRoute(":tableId")} element={<VirtualTableHistoryContainer />} />
+          <Route path="/poker/tables/:tableId/hands/:handId" element={<VirtualHandHistoryDetailContainer />} />
+          <Route path={getVirtualLeaderboardRoute()} element={<VirtualLeaderboardContainer />} />
+          <Route path={getVirtualStatsRoute()} element={<VirtualStatsContainer />} />
           <Route path={getLeaderboardRoute()} element={<LeaderboardScreen />} />
           <Route path="/players/:userId" element={<PlayerProfileScreen />} />
           <Route path={getCreateRoomRoute()} element={<CreateRoomScreen />} />
           <Route path="/rooms/:roomId" element={<RoomScreen />} />
+          <Route path={getJoinRoute()} element={<JoinRoomScreen />} />
           <Route path="/join/:inviteCode" element={<JoinRoomScreen />} />
           <Route path="*" element={<Navigate to={getHomeRoute()} replace />} />
         </Routes>
       </main>
-      <BottomNav />
+      {isJoinRoute || isVirtualTableFullscreen ? null : <BottomNav />}
+      <AppSplashScreen visible={showSplash} />
     </div>
   );
+}
+
+function RoomsListProvider({ children }: { children: ReactNode }): JSX.Element {
+  const { state } = useSession();
+  const refreshRequestIdRef = useRef(0);
+  const [roomsState, setRoomsState] = useState<LoadState<RoomsListResponseDto>>({
+    status: "idle",
+    data: null,
+    errorMessage: null
+  });
+
+  const refreshRoomsInternal = useCallback(async (background = false): Promise<void> => {
+    if (!state.accessToken) {
+      refreshRequestIdRef.current += 1;
+      setRoomsState({
+        status: "idle",
+        data: null,
+        errorMessage: null
+      });
+      return;
+    }
+
+    const requestId = refreshRequestIdRef.current + 1;
+    refreshRequestIdRef.current = requestId;
+
+    setRoomsState((current) => {
+      if (background && current.data) {
+        return {
+          status: "ready" as const,
+          data: current.data,
+          errorMessage: null
+        };
+      }
+
+      return {
+        status: "loading" as const,
+        data: current.data,
+        errorMessage: null
+      };
+    });
+
+    try {
+      const data = await getRooms(state.accessToken);
+
+      if (refreshRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setRoomsState({
+        status: "ready",
+        data,
+        errorMessage: null
+      });
+    } catch (error) {
+      if (refreshRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setRoomsState((current) => ({
+        status: "error",
+        data: current.data,
+        errorMessage: getErrorMessage(error, "Не получилось загрузить игры")
+      }));
+    }
+  }, [state.accessToken]);
+
+  const refreshRooms = useCallback(async (): Promise<void> => {
+    await refreshRoomsInternal();
+  }, [refreshRoomsInternal]);
+
+  useEffect(() => {
+    void refreshRooms();
+  }, [refreshRooms]);
+
+  useEffect(() => {
+    if (!state.accessToken) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshRoomsInternal(true);
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [refreshRoomsInternal, state.accessToken]);
+
+  useEffect(() => {
+    if (!state.accessToken) {
+      return;
+    }
+
+    const handleWindowFocus = (): void => {
+      void refreshRoomsInternal(true);
+    };
+
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === "visible") {
+        void refreshRoomsInternal(true);
+      }
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refreshRoomsInternal, state.accessToken]);
+
+  return (
+    <RoomsListContext.Provider
+      value={{
+        roomsState,
+        refreshRooms
+      }}
+    >
+      {children}
+    </RoomsListContext.Provider>
+  );
+}
+
+const RoomsListContext = createContext<RoomsListContextValue | null>(null);
+
+function useRoomsList(): RoomsListContextValue {
+  const context = useContext(RoomsListContext);
+
+  if (!context) {
+    throw new Error("useRoomsList must be used inside RoomsListProvider");
+  }
+
+  return context;
 }
 
 function LaunchInviteRedirect(): JSX.Element | null {
   const { state } = useSession();
   const location = useLocation();
   const navigate = useNavigate();
+  const virtualInviteCode = getVirtualInviteCodeFromStartParam(state.startParam);
 
   useEffect(() => {
-    if (
-      state.inviteCode &&
-      location.pathname === getHomeRoute() &&
-      state.status === "authenticated"
-    ) {
+    if (location.pathname !== getHomeRoute() || state.status !== "authenticated") {
+      return;
+    }
+
+    if (virtualInviteCode) {
+      void navigate(getJoinVirtualTableInviteRoute(virtualInviteCode), { replace: true });
+      return;
+    }
+
+    if (state.inviteCode) {
       void navigate(getJoinRoomRoute(state.inviteCode), { replace: true });
     }
-  }, [location.pathname, navigate, state.inviteCode, state.status]);
+  }, [location.pathname, navigate, state.inviteCode, state.status, virtualInviteCode]);
 
   return null;
 }
@@ -209,12 +526,7 @@ function TelegramBackButtonSync(): JSX.Element | null {
     }
 
     const handleBackClick = (): void => {
-      if (canUseBrowserBack()) {
-        void navigate(-1);
-        return;
-      }
-
-      void navigate(getTelegramBackFallbackPath(location.pathname), { replace: true });
+      navigateBack(navigate, location.pathname);
     };
 
     showTelegramBackButton();
@@ -231,72 +543,40 @@ function TelegramBackButtonSync(): JSX.Element | null {
 
 function AppChrome(): JSX.Element {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { state } = useSession();
   const isHome = location.pathname === getHomeRoute();
-  const canGoBack = !isHome;
-  const usesCompactHeader =
-    location.pathname === getCreateRoomRoute() || location.pathname.startsWith("/rooms/");
-  const userName = state.session?.user.firstName ?? state.session?.user.username ?? "игрок";
-  const avatarUrl = state.session?.user.avatarUrl;
-
-  function handleBack(): void {
-    if (canUseBrowserBack()) {
-      void navigate(-1);
-      return;
-    }
-
-    void navigate(getTelegramBackFallbackPath(location.pathname), { replace: true });
-  }
+  const isLeaderboard = location.pathname === getLeaderboardRoute();
+  const [isPokerScoreInfoOpen, setIsPokerScoreInfoOpen] = useState(false);
+  const title =
+    isLeaderboard
+      ? "Лидерборд"
+      : isHome
+        ? "Poker Table"
+        : getChromeSubtitle(location.pathname);
 
   return (
-    <header
-      className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[#141313]/88 backdrop-blur-xl"
-      style={{ paddingTop: "env(safe-area-inset-top)" }}
-    >
-      <div
-        className={cn(
-          "flex w-full items-center gap-3 px-4",
-          usesCompactHeader ? "h-16" : "h-20"
-        )}
+    <>
+      <header
+        className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[#141313]/88 backdrop-blur-xl"
+        style={{ paddingTop: appHeaderTopPadding }}
       >
-        {usesCompactHeader && canGoBack ? (
-          <button
-            aria-label="Назад"
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground transition hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={handleBack}
-            type="button"
-          >
-            <MaterialIcon icon="arrow_back_ios_new" />
-          </button>
-        ) : avatarUrl ? (
-          <div className="h-12 w-12 overflow-hidden rounded-full border border-white/10 bg-surfaceHigher shadow-panel">
-            <img alt="" className="h-full w-full object-cover" src={avatarUrl} />
-          </div>
-        ) : (
-          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-surfaceHigher text-accent shadow-panel">
-            <MaterialIcon icon="playing_cards" />
-          </div>
-        )}
-
-        {usesCompactHeader ? (
-          <div className="min-w-0">
-            <p className="truncate text-[1.1rem] font-semibold text-white">
-              {getChromeSubtitle(location.pathname)}
-            </p>
-          </div>
-        ) : (
-          <div className="min-w-0">
-            <h1 className="truncate font-display text-[2rem] font-bold leading-none text-white">
-              Poker Table
-            </h1>
-            <p className="mt-1 truncate text-sm text-muted">
-              {isHome ? `${getGreeting()}, ${userName}` : getChromeSubtitle(location.pathname)}
-            </p>
-          </div>
-        )}
-      </div>
-    </header>
+        <div className="flex h-[4.5rem] w-full items-center justify-center px-4 text-center">
+          {isHome ? (
+            <div className="flex min-w-0 items-center justify-center gap-3">
+              <PokerTableLogo className="h-10 w-10 shrink-0" />
+              <p className="truncate font-display text-[1.95rem] font-semibold leading-none text-white">{title}</p>
+            </div>
+          ) : (
+            <div className="flex min-w-0 items-center justify-center gap-2">
+              <p className="truncate text-[1.15rem] font-semibold text-white">{title}</p>
+              {isLeaderboard ? (
+                <InfoIconButton label="Что такое Poker Score" onClick={() => setIsPokerScoreInfoOpen(true)} />
+              ) : null}
+            </div>
+          )}
+        </div>
+      </header>
+      <PokerScoreInfoModal open={isPokerScoreInfoOpen} onOpenChange={setIsPokerScoreInfoOpen} />
+    </>
   );
 }
 
@@ -304,10 +584,21 @@ function BottomNav(): JSX.Element {
   const location = useLocation();
   const { state } = useSession();
   const profileRoute = state.session?.user.id ? getPlayerRoute(state.session.user.id) : getHomeRoute();
-  const gameRoute = getGamesRoute(location.pathname);
   const items = [
     { label: "Главная", icon: "home", href: getHomeRoute(), active: location.pathname === getHomeRoute() },
-    { label: "Игры", icon: "style", href: gameRoute, active: isGamesRoute(location.pathname) },
+    {
+      label: "Онлайн",
+      icon: "playing_cards",
+      href: getVirtualLobbyRoute(),
+      active: isVirtualPokerRoute(location.pathname)
+    },
+    { label: "Оффлайн", icon: "style", href: getGamesRoute(), active: isGamesBaseRoute(location.pathname) },
+    {
+      label: "Клуб",
+      icon: "groups",
+      href: getClubRoute(),
+      active: location.pathname === getClubRoute()
+    },
     {
       label: "Рейтинг",
       icon: "leaderboard",
@@ -329,12 +620,15 @@ function BottomNav(): JSX.Element {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#1d1c1c]/88 backdrop-blur-xl"
       style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="grid w-full grid-cols-4 gap-2 px-4 pb-1 pt-3">
+      <div
+        className="grid w-full gap-1 px-2 pb-1 pt-3"
+        style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+      >
         {items.map((item) => (
           <Link
             key={item.label}
             className={cn(
-              "flex min-h-12 flex-col items-center justify-center rounded-xl px-2 py-2 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+              "flex min-h-12 flex-col items-center justify-center rounded-xl px-1 py-2 text-[10px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
               item.active ? "text-accent" : "text-muted hover:bg-white/[0.03] hover:text-foreground"
             )}
             to={item.href}
@@ -349,133 +643,39 @@ function BottomNav(): JSX.Element {
 }
 
 function HomeScreen(): JSX.Element {
-  const { bootstrap, state } = useSession();
-  const [roomsState, setRoomsState] = useState<LoadState<RoomsListResponseDto>>({
-    status: "idle",
-    data: null,
-    errorMessage: null
-  });
-  useEffect(() => {
-    if (!state.accessToken) {
-      setRoomsState({
-        status: "idle",
-        data: null,
-        errorMessage: null
-      });
-      return;
-    }
-
-    let isCancelled = false;
-    setRoomsState({
-      status: "loading",
-      data: null,
-      errorMessage: null
-    });
-
-    void getRooms(state.accessToken)
-      .then((data) => {
-        if (isCancelled) {
-          return;
-        }
-
-        setRoomsState({
-          status: "ready",
-          data,
-          errorMessage: null
-        });
-      })
-      .catch((error: unknown) => {
-        if (isCancelled) {
-          return;
-        }
-
-        setRoomsState({
-          status: "error",
-          data: null,
-          errorMessage: getErrorMessage(error, "Не получилось загрузить игры")
-        });
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [state.accessToken]);
-
-  const activeRooms = roomsState.data?.active ?? [];
-  const recentRooms = roomsState.data?.recent ?? [];
-  const inviteRoute = state.inviteCode ? getJoinRoomRoute(state.inviteCode) : null;
+  const { state } = useSession();
 
   return (
-    <ScreenLayout banner={getSessionBanner(state.status, state.errorMessage)}>
-      <section className={cn(cardClassName, "relative overflow-hidden px-5 py-6")}>
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(78,222,163,0.09),transparent_45%)]" />
-        <div className="absolute right-[-2.5rem] top-[-2.5rem] h-32 w-32 rounded-full bg-accent/10 blur-3xl" />
-        <div className="relative space-y-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent/90">
-              Ваш стол на вечер
-            </p>
-            <h2 className="mt-3 font-display text-[2rem] font-semibold leading-tight text-white">
-              Создайте игру за минуту
-            </h2>
-            <p className="mt-3 max-w-[22rem] text-sm leading-6 text-muted">
-              Задайте сумму ребая, позовите друзей и следите за результатом без лишних сообщений в чате.
-            </p>
-          </div>
-          <div className="space-y-3">
-            <Link className="block" to={getCreateRoomRoute()}>
-              <Button className="w-full">
-                <MaterialIcon icon="add_circle" />
-                Создать стол
-              </Button>
-            </Link>
-            {inviteRoute ? (
-              <Link className="block" to={inviteRoute}>
-                <Button className={cn("w-full", tertiaryButtonClassName)}>
-                  <MaterialIcon icon="group_add" />
-                  Перейти к приглашению
-                </Button>
-              </Link>
-            ) : (
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-muted">
-                Как только придёт приглашение в Telegram, мы покажем вход в игру прямо здесь.
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
+    <ScreenLayout banner={getSessionBanner(state.status, state.errorMessage)}>{null}</ScreenLayout>
+  );
+}
 
-      <section className="space-y-3">
-        <SectionHeading
-          action={
-            <Link className="text-sm font-semibold text-accent" to={getCreateRoomRoute()}>
-              Новый стол
-            </Link>
-          }
-          title="Активные игры"
-          description="Столы, к которым вы уже подключены."
-        />
+function GamesScreen(): JSX.Element {
+  const { state } = useSession();
+  const { roomsState, refreshRooms } = useRoomsList();
+  const activeRooms = roomsState.data?.active ?? [];
+  const recentRooms = roomsState.data?.recent ?? [];
 
-        {state.status === "error" ? (
-          <Button className="w-full" onClick={() => void bootstrap()}>
+  return (
+    <ScreenLayout>
+      <OfflineQuickActions inviteCode={state.inviteCode} />
+
+      {roomsState.status === "loading" ? (
+        <InfoCard title="Загружаем игры" description="Собираем ваши активные и последние столы." />
+      ) : null}
+
+      {roomsState.status === "error" ? (
+        <div className="space-y-3">
+          <InfoCard title="Пока не получилось" description={roomsState.errorMessage} />
+          <Button className={cn("w-full", secondaryButtonClassName)} onClick={() => void refreshRooms()}>
             Попробовать снова
           </Button>
-        ) : null}
+        </div>
+      ) : null}
 
-        {roomsState.status === "loading" ? (
-          <InfoCard
-            title="Загружаем игры"
-            description="Проверяем ваши столы и последние результаты."
-          />
-        ) : null}
-        {roomsState.status === "error" ? (
-          <InfoCard title="Пока не получилось" description={roomsState.errorMessage} />
-        ) : null}
+      <section className="space-y-3">
         {roomsState.status !== "loading" && activeRooms.length === 0 ? (
-          <InfoCard
-            title="Игр пока нет"
-            description="Создайте первый стол или откройте приглашение от друга."
-          />
+          <InfoCard title="Пока пусто" description="Создайте новый стол или откройте приглашение от друга." />
         ) : null}
         {activeRooms.map((room) => (
           <Link key={room.id} to={getRoomRoute(room.id)}>
@@ -495,10 +695,13 @@ function HomeScreen(): JSX.Element {
                 </span>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 border-y border-white/5 py-4">
-                <Metric label="Ребай" value={formatMinorMoney(room.rebuyAmountMinor, room.currency)} />
                 <Metric
-                  label="Ваши закупы"
-                  value={formatMinorMoney(room.myBuyinsMinor, room.currency)}
+                  label="Сумма входа"
+                  value={formatCurrencyFromChips(room.buyInChips, room.currency, room.chipsPerCurrencyUnit)}
+                />
+                <Metric
+                  label="Кол-во фишек"
+                  value={formatChipsCount(room.buyInChips)}
                   valueClassName="text-accent"
                 />
               </div>
@@ -511,53 +714,117 @@ function HomeScreen(): JSX.Element {
       </section>
 
       <section className="space-y-3">
-        <SectionHeading
-          action={<span className="text-sm font-semibold text-accent">Все</span>}
-          title="Последние игры"
-          description="Здесь появятся закрытые столы с вашим итогом."
-        />
-        {recentRooms.length === 0 ? (
-          <InfoCard
-            title="История пока пустая"
-            description="Как только игра завершится, итог появится здесь."
-          />
+        <div>
+          <h2 className="text-[1.15rem] font-semibold leading-tight text-white">Последние игры</h2>
+        </div>
+        {roomsState.status !== "loading" && recentRooms.length === 0 ? (
+          <InfoCard title="История пока пустая" description="Завершённые игры появятся здесь автоматически." />
         ) : null}
         {recentRooms.map((room) => (
-          <article key={room.id} className={cn(mutedCardClassName, "px-4 py-4")}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/5 bg-surfaceHigher text-muted">
-                  <MaterialIcon icon="history" />
+          <Link key={room.id} to={getRoomRoute(room.id)}>
+            <article className={cn(mutedCardClassName, "px-3.5 py-3")}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/5 bg-surfaceHigher text-muted">
+                    <MaterialIcon icon="history" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-white">{room.title}</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {room.closedAt ? formatDate(room.closedAt) : "Игра завершена"}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="truncate text-xl font-semibold text-white">{room.title}</p>
-                  <p className="mt-1 text-sm text-muted">
-                    {room.closedAt ? `Закрыта ${formatDate(room.closedAt)}` : "Игра завершена"}
+                <div className="shrink-0 text-right">
+                  <p className={cn("text-base font-semibold", getResultColorClass(room.myNetResultChips ?? "0"))}>
+                    {formatSignedCurrencyFromChips(
+                      room.myNetResultChips ?? "0",
+                      room.currency,
+                      room.chipsPerCurrencyUnit
+                    )}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {formatSignedChipsCount(room.myNetResultChips ?? "0")}
                   </p>
                 </div>
               </div>
-              <p className={cn("text-xl font-semibold", getResultColorClass(room.myNetResultMinor ?? "0"))}>
-                {formatMinorMoney(room.myNetResultMinor ?? "0", room.currency)}
-              </p>
-            </div>
-          </article>
+            </article>
+          </Link>
         ))}
       </section>
     </ScreenLayout>
   );
 }
 
+function OfflineQuickActions({ inviteCode }: { inviteCode: string | null }): JSX.Element {
+  const inviteRoute = inviteCode ? getJoinRoomRoute(inviteCode) : null;
+
+  return (
+    <section className={cn(cardClassName, "relative overflow-hidden px-5 py-6")}>
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(78,222,163,0.09),transparent_45%)]" />
+      <div className="absolute right-[-2.5rem] top-[-2.5rem] h-32 w-32 rounded-full bg-accent/10 blur-3xl" />
+      <div className="relative space-y-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent/90">
+            Оффлайн-игра
+          </p>
+          <h2 className="mt-3 font-display text-[2rem] font-semibold leading-tight text-white">
+            Создайте игру
+          </h2>
+        </div>
+        <div className="space-y-3">
+          <Link className="block" to={getCreateRoomRoute()}>
+            <Button className="w-full">
+              <MaterialIcon icon="add_circle" />
+              Создать стол
+            </Button>
+          </Link>
+          <Link className="block" to={getJoinRoute()}>
+            <Button className={cn("w-full", secondaryButtonClassName)}>
+              <MaterialIcon icon="group_add" />
+              Присоединиться к столу
+            </Button>
+          </Link>
+          {inviteRoute ? (
+            <Link className="block" to={inviteRoute}>
+              <Button className={cn("w-full", tertiaryButtonClassName)}>
+                <MaterialIcon icon="group_add" />
+                Перейти к приглашению
+              </Button>
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ClubScreen(): JSX.Element {
+  return <ScreenLayout>{null}</ScreenLayout>;
+}
+
 function LeaderboardScreen(): JSX.Element {
   const { state } = useSession();
+  const [mode, setMode] = useState<LeaderboardMode>("offline");
   const [scope, setScope] = useState(DEFAULT_LEADERBOARD_QUERY.scope);
   const [period, setPeriod] = useState(DEFAULT_LEADERBOARD_QUERY.period);
+  const leaderboardColumns = "grid-cols-[2.75rem_minmax(7.5rem,1fr)_minmax(5rem,0.72fr)_3rem]";
   const [leaderboardState, setLeaderboardState] = useState<LoadState<GetLeaderboardResponseDto>>({
+    status: "idle",
+    data: null,
+    errorMessage: null
+  });
+  const [virtualLeaderboardState, setVirtualLeaderboardState] = useState<LoadState<GetVirtualLeaderboardResponseDto>>({
     status: "idle",
     data: null,
     errorMessage: null
   });
 
   useEffect(() => {
+    if (mode !== "offline") {
+      return;
+    }
+
     if (!state.accessToken) {
       setLeaderboardState({
         status: "idle",
@@ -605,12 +872,67 @@ function LeaderboardScreen(): JSX.Element {
     return () => {
       isCancelled = true;
     };
-  }, [period, scope, state.accessToken]);
+  }, [mode, period, scope, state.accessToken]);
 
-  const items = leaderboardState.data?.items ?? [];
+  useEffect(() => {
+    if (mode !== "online") {
+      return;
+    }
+
+    if (!state.accessToken) {
+      setVirtualLeaderboardState({
+        status: "idle",
+        data: null,
+        errorMessage: null
+      });
+      return;
+    }
+
+    let isCancelled = false;
+    setVirtualLeaderboardState({
+      status: "loading",
+      data: null,
+      errorMessage: null
+    });
+
+    void getVirtualLeaderboard(state.accessToken, {
+      ...DEFAULT_LEADERBOARD_QUERY,
+      scope,
+      period
+    })
+      .then((data) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setVirtualLeaderboardState({
+          status: "ready",
+          data,
+          errorMessage: null
+        });
+      })
+      .catch((error: unknown) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setVirtualLeaderboardState({
+          status: "error",
+          data: null,
+          errorMessage: getErrorMessage(error, "Не получилось загрузить онлайн-рейтинг")
+        });
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [mode, period, scope, state.accessToken]);
+
+  const activeLeaderboardState = mode === "online" ? virtualLeaderboardState : leaderboardState;
+  const offlineItems = leaderboardState.data?.items ?? [];
+  const onlineItems = virtualLeaderboardState.data?.items ?? [];
+  const items = mode === "online" ? onlineItems : offlineItems;
   const emptyCopy = getLeaderboardEmptyCopy(scope);
-  const topPlayers = items.slice(0, 3);
-  const remainingPlayers = items.slice(3);
 
   if (!state.accessToken) {
     return (
@@ -627,21 +949,24 @@ function LeaderboardScreen(): JSX.Element {
 
   return (
     <ScreenLayout>
-      <section className="space-y-2 pt-1">
-        <h2 className="font-display text-[2.25rem] font-semibold leading-tight text-white">
-          Лидерборд
-        </h2>
-        <p className="text-base leading-7 text-muted">
-          Сравнивайте форму игроков по завершённым столам.
-        </p>
+      <section className={modeToggleClassName}>
+        <SegmentedControl
+          options={[
+            { value: "offline", label: "Офлайн" },
+            { value: "online", label: "Онлайн" }
+          ]}
+          value={mode}
+          onChange={(nextMode) => setMode(nextMode as LeaderboardMode)}
+        />
       </section>
 
-      <section className={`${cardClassName} space-y-4`}>
+      <section className={`${cardClassName} space-y-3`}>
+        <p className="text-[11px] uppercase tracking-[0.16em] text-muted">Кого показать</p>
         <div className="grid grid-cols-2 gap-2">
           {LEADERBOARD_SCOPE_OPTIONS.map((option) => (
             <button
               key={option.value}
-              className={getFilterButtonClass(scope === option.value)}
+              className={getFilterButtonClass(scope === option.value, "px-4 py-3")}
               onClick={() => setScope(option.value)}
               type="button"
             >
@@ -649,117 +974,128 @@ function LeaderboardScreen(): JSX.Element {
             </button>
           ))}
         </div>
-        <p className="text-sm italic leading-6 text-muted">{getScopeDescription(scope)}</p>
-        <div className="flex flex-wrap gap-2">
-          {LEADERBOARD_PERIOD_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              className={getFilterButtonClass(period === option.value, "px-3")}
-              onClick={() => setPeriod(option.value)}
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
       </section>
 
-      {leaderboardState.status === "loading" ? (
+      <section className={`${cardClassName} space-y-3`}>
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-[0.16em] text-muted">Период</span>
+          <select
+            className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-surfaceHigh px-4 text-base text-foreground outline-none transition focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onChange={(event) => setPeriod(event.target.value as (typeof DEFAULT_LEADERBOARD_QUERY)["period"])}
+            value={period}
+          >
+            {LEADERBOARD_PERIOD_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+
+      {activeLeaderboardState.status === "loading" ? (
         <InfoCard
-          title="Собираем рейтинг"
-          description="Считаем Poker Score и обновляем показатели по выбранному периоду."
+          title={mode === "online" ? "Собираем онлайн-рейтинг" : "Собираем рейтинг"}
+          description={
+            mode === "online"
+              ? "Обновляем места, профит и очки по онлайн-игре."
+              : "Считаем Poker Score и обновляем показатели по выбранному периоду."
+          }
         />
       ) : null}
 
-      {leaderboardState.status === "error" ? (
-        <InfoCard title="Пока не получилось" description={leaderboardState.errorMessage} />
+      {activeLeaderboardState.status === "error" ? (
+        <InfoCard title="Пока не получилось" description={activeLeaderboardState.errorMessage} />
       ) : null}
 
-      {leaderboardState.status === "ready" && items.length === 0 ? (
-        <InfoCard title={emptyCopy.title} description={emptyCopy.description} />
+      {activeLeaderboardState.status === "ready" && items.length === 0 ? (
+        <InfoCard
+          title={mode === "online" ? "Онлайн-рейтинг пока пустой" : emptyCopy.title}
+          description={
+            mode === "online"
+              ? scope === "played-with-me"
+                ? "Статистика появится, когда у вас будут завершённые онлайн-игры друг с другом."
+                : "Как только накопятся завершённые онлайн-игры, здесь появится общий рейтинг."
+              : emptyCopy.description
+          }
+        />
       ) : null}
 
-      {topPlayers.length > 0 ? (
-        <section className="grid grid-cols-3 gap-3">
-          {topPlayers.map((player, index) => {
-            const highlight = index === 0;
-
-            return (
-              <Link key={player.userId} to={getPlayerRoute(player.userId)}>
-                <article
-                  className={cn(
-                    cardClassName,
-                    "flex h-full flex-col items-center justify-end px-3 py-4 text-center",
-                    highlight && "border-accent/40 bg-[linear-gradient(180deg,rgba(78,222,163,0.12),rgba(26,26,26,0.85))]"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "flex h-12 w-12 items-center justify-center rounded-full border bg-surfaceHigher text-sm font-semibold text-white",
-                      highlight ? "border-accent text-accent" : "border-white/10"
-                    )}
-                  >
-                    {player.rank}
-                  </div>
-                  <p className={cn("mt-3 text-sm font-semibold", highlight ? "text-accent" : "text-white")}>
-                    {player.displayName}
-                  </p>
-                  <p className={cn("mt-2 text-[1.1rem] font-semibold", getToneClass(player.totalProfitMinor))}>
-                    {formatSignedMinorStat(player.totalProfitMinor)}
-                  </p>
-                  <div className="mt-3 space-y-1 text-xs text-muted">
-                    <p>ROI {formatPercentFromBps(player.roiBps)}</p>
-                    <p>
-                      <span className="text-base font-semibold text-white">{player.pokerScore}</span> PS
-                    </p>
-                  </div>
-                </article>
-              </Link>
-            );
-          })}
-        </section>
-      ) : null}
-
-      {remainingPlayers.length > 0 ? (
+      {items.length > 0 ? (
         <section className="space-y-3">
-          <div className="grid grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,0.8fr)] gap-3 px-2 text-[11px] uppercase tracking-[0.18em] text-muted">
+          <div className={cn("grid gap-3 px-2 text-[11px] uppercase tracking-[0.18em] text-muted", leaderboardColumns)}>
+            <span>Место</span>
             <span>Игрок</span>
             <span className="text-right">Профит</span>
             <span className="text-right">Score</span>
           </div>
-          {remainingPlayers.map((player) => (
-            <Link key={player.userId} to={getPlayerRoute(player.userId)}>
-              <article
-                className={cn(
-                  mutedCardClassName,
-                  "grid grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,0.8fr)] items-center gap-3 px-4 py-4",
-                  player.userId === state.session?.user.id &&
-                    "border-accent/40 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(26,26,26,0.8))]"
-                )}
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-surfaceHigher text-sm font-semibold text-white">
-                    {player.rank}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-lg font-semibold text-white">{player.displayName}</p>
-                    <p className="text-xs text-muted">
-                      {formatPercentFromBps(player.roiBps)} ROI • {formatPercentFromBps(player.winRateBps)} побед
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={cn("text-lg font-semibold", getToneClass(player.totalProfitMinor))}>
-                    {formatSignedMinorStat(player.totalProfitMinor)}
-                  </p>
-                  <p className="text-xs text-muted">{player.gamesCount} {getGamesLabel(player.gamesCount)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-semibold text-white">{player.pokerScore}</p>
-                </div>
-              </article>
-            </Link>
-          ))}
+          {mode === "online"
+            ? onlineItems.map((player) => (
+                <Link key={player.userId} to={`${getPlayerRoute(player.userId)}?mode=online`}>
+                  <article
+                    className={cn(
+                      mutedCardClassName,
+                      "grid items-center gap-3 px-4 py-3",
+                      leaderboardColumns,
+                      player.userId === state.session?.user.id &&
+                        "border-accent/40 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(26,26,26,0.8))]"
+                    )}
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-surfaceHigher text-sm font-semibold text-white">
+                      {player.rank}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-semibold text-white">{player.displayName}</p>
+                      <p className="truncate whitespace-nowrap text-xs text-muted">
+                        {player.handsPlayed} {getHandsLabel(player.handsPlayed)} • {formatPercentFromBps(player.winRateBps)} побед
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={cn("text-lg font-semibold", getToneClass(player.netChips))}>
+                        {formatSignedChipsCount(player.netChips)}
+                      </p>
+                      <p className="text-xs text-muted">
+                        {player.netEstimatedMinor ? formatSignedCurrency(player.netEstimatedMinor, "RUB") : null}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-semibold text-white">{player.onlinePokerScore}</p>
+                    </div>
+                  </article>
+                </Link>
+              ))
+            : offlineItems.map((player) => (
+                <Link key={player.userId} to={getPlayerRoute(player.userId)}>
+                  <article
+                    className={cn(
+                      mutedCardClassName,
+                      "grid items-center gap-3 px-4 py-3",
+                      leaderboardColumns,
+                      player.userId === state.session?.user.id &&
+                        "border-accent/40 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(26,26,26,0.8))]"
+                    )}
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-surfaceHigher text-sm font-semibold text-white">
+                      {player.rank}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-semibold text-white">{player.displayName}</p>
+                      <p className="truncate whitespace-nowrap text-xs text-muted">
+                        {formatPercentFromBps(player.roiBps)} ROI • {player.gamesCount} {getGamesLabel(player.gamesCount)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={cn("text-lg font-semibold", getToneClass(player.totalProfitMinor))}>
+                        {formatLeaderboardProfit(player.totalProfitMinor)}
+                      </p>
+                      <p className="text-xs text-muted">{formatPercentFromBps(player.winRateBps)} побед</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-semibold text-white">{player.pokerScore}</p>
+                    </div>
+                  </article>
+                </Link>
+              ))}
         </section>
       ) : null}
     </ScreenLayout>
@@ -769,14 +1105,49 @@ function LeaderboardScreen(): JSX.Element {
 function PlayerProfileScreen(): JSX.Element {
   const { userId = "" } = useParams();
   const { state } = useSession();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [isPokerScoreInfoOpen, setIsPokerScoreInfoOpen] = useState(false);
+  const [isStyleStatsExpanded, setIsStyleStatsExpanded] = useState(false);
+  const [isStyleStatsInfoOpen, setIsStyleStatsInfoOpen] = useState(false);
+  const [mode, setMode] = useState<ProfileMode>(() => getProfileModeFromSearchParams(searchParams));
   const [profileState, setProfileState] = useState<LoadState<GetPlayerProfileResponseDto>>({
     status: "idle",
     data: null,
     errorMessage: null
   });
+  const [virtualProfileState, setVirtualProfileState] = useState<LoadState<GetVirtualPlayerProfileResponseDto>>({
+    status: "idle",
+    data: null,
+    errorMessage: null
+  });
   const [isAccessDenied, setIsAccessDenied] = useState(false);
+  const [isVirtualAccessDenied, setIsVirtualAccessDenied] = useState(false);
 
   useEffect(() => {
+    setMode(getProfileModeFromSearchParams(searchParams));
+  }, [searchParams]);
+
+  const updateMode = useCallback(
+    (nextMode: ProfileMode) => {
+      setMode(nextMode);
+      const nextSearchParams = new URLSearchParams(searchParams);
+
+      if (nextMode === "online") {
+        nextSearchParams.set("mode", "online");
+      } else {
+        nextSearchParams.delete("mode");
+      }
+
+      setSearchParams(nextSearchParams, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
+  useEffect(() => {
+    if (mode !== "offline") {
+      return;
+    }
+
     if (!state.accessToken || !userId) {
       setProfileState({
         status: "idle",
@@ -830,7 +1201,64 @@ function PlayerProfileScreen(): JSX.Element {
     return () => {
       isCancelled = true;
     };
-  }, [state.accessToken, userId]);
+  }, [mode, state.accessToken, userId]);
+
+  useEffect(() => {
+    if (mode !== "online") {
+      return;
+    }
+
+    if (!state.accessToken || !userId) {
+      setVirtualProfileState({
+        status: "idle",
+        data: null,
+        errorMessage: null
+      });
+      setIsVirtualAccessDenied(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setVirtualProfileState({
+      status: "loading",
+      data: null,
+      errorMessage: null
+    });
+    setIsVirtualAccessDenied(false);
+
+    void getVirtualPlayerProfile(state.accessToken, userId)
+      .then((data) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setVirtualProfileState({
+          status: "ready",
+          data,
+          errorMessage: null
+        });
+      })
+      .catch((error: unknown) => {
+        if (isCancelled) {
+          return;
+        }
+
+        const hasAccessDenied = error instanceof ApiRequestError && error.status === 403;
+
+        setIsVirtualAccessDenied(hasAccessDenied);
+        setVirtualProfileState({
+          status: "error",
+          data: null,
+          errorMessage: hasAccessDenied
+            ? "Онлайн-статистика откроется после вашей первой общей завершённой игры."
+            : getErrorMessage(error, "Не получилось открыть онлайн-статистику игрока")
+        });
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [mode, state.accessToken, userId]);
 
   if (!state.accessToken) {
     return (
@@ -848,43 +1276,75 @@ function PlayerProfileScreen(): JSX.Element {
     );
   }
 
-  if (profileState.status === "loading" || profileState.status === "idle") {
+  const activeProfileState = mode === "online" ? virtualProfileState : profileState;
+  const activeAccessDenied = mode === "online" ? isVirtualAccessDenied : isAccessDenied;
+
+  if (activeProfileState.status === "loading" || activeProfileState.status === "idle") {
     return (
       <ScreenLayout
         title="Профиль игрока"
-        subtitle="Собираем статистику по завершённым играм."
+        subtitle={mode === "online" ? "Собираем онлайн-статистику игрока." : "Собираем статистику по завершённым играм."}
         backTo={getLeaderboardRoute()}
       >
+        <section className={modeToggleClassName}>
+          <SegmentedControl
+            options={[
+              { value: "offline", label: "Офлайн" },
+              { value: "online", label: "Онлайн" }
+            ]}
+            value={mode}
+            onChange={(nextMode) => updateMode(nextMode as ProfileMode)}
+          />
+        </section>
         <InfoCard
-          title="Открываем профиль"
-          description="Ещё немного, и покажем форму игрока и последние результаты."
+          title={mode === "online" ? "Открываем онлайн-статистику" : "Открываем профиль"}
+          description={
+            mode === "online"
+              ? "Ещё немного, и покажем результат, динамику и последние онлайн-игры."
+              : "Ещё немного, и покажем форму игрока и последние результаты."
+          }
         />
       </ScreenLayout>
     );
   }
 
-  if (profileState.status === "error") {
+  if (activeProfileState.status === "error") {
     return (
       <ScreenLayout
-        title={isAccessDenied ? "Профиль закрыт" : "Профиль игрока"}
+        title={activeAccessDenied ? "Профиль пока закрыт" : "Профиль игрока"}
         subtitle={
-          isAccessDenied
-            ? "Подробная статистика доступна только игрокам с общими завершёнными столами."
-            : "Пока не удалось загрузить статистику игрока."
+          activeAccessDenied
+            ? mode === "online"
+              ? "Онлайн-статистика появится, когда у вас будет хотя бы одна общая завершённая игра."
+              : "Подробная статистика доступна только игрокам с общими завершёнными столами."
+            : mode === "online"
+              ? "Пока не удалось загрузить онлайн-статистику игрока."
+              : "Пока не удалось загрузить статистику игрока."
         }
         backTo={getLeaderboardRoute()}
       >
+        <section className={modeToggleClassName}>
+          <SegmentedControl
+            options={[
+              { value: "offline", label: "Офлайн" },
+              { value: "online", label: "Онлайн" }
+            ]}
+            value={mode}
+            onChange={(nextMode) => updateMode(nextMode as ProfileMode)}
+          />
+        </section>
         <InfoCard
-          title={isAccessDenied ? "Пока доступ закрыт" : "Не получилось"}
-          description={profileState.errorMessage}
+          title={activeAccessDenied ? "Пока доступ закрыт" : "Не получилось"}
+          description={activeProfileState.errorMessage}
         />
       </ScreenLayout>
     );
   }
 
   const profile = profileState.data;
+  const virtualProfile = virtualProfileState.data;
 
-  if (!profile) {
+  if (mode === "offline" && !profile) {
     return (
       <ScreenLayout
         title="Профиль игрока"
@@ -899,7 +1359,175 @@ function PlayerProfileScreen(): JSX.Element {
     );
   }
 
-  const { recentGames, stats, user } = profile;
+  if (mode === "online" && !virtualProfile) {
+    return (
+      <ScreenLayout
+        title="Профиль игрока"
+        subtitle="Онлайн-статистика пока недоступна."
+        backTo={getLeaderboardRoute()}
+      >
+        <section className={modeToggleClassName}>
+          <SegmentedControl
+            options={[
+              { value: "offline", label: "Офлайн" },
+              { value: "online", label: "Онлайн" }
+            ]}
+            value={mode}
+            onChange={(nextMode) => updateMode(nextMode as ProfileMode)}
+          />
+        </section>
+        <InfoCard
+          title="Пока пусто"
+          description="Попробуйте открыть онлайн-статистику ещё раз чуть позже."
+        />
+      </ScreenLayout>
+    );
+  }
+
+  if (
+    mode === "online" &&
+    virtualProfile &&
+    virtualProfile.tableStats.tablesPlayed === 0 &&
+    virtualProfile.recentResults.length === 0
+  ) {
+    return (
+      <ScreenLayout
+        title="Профиль игрока"
+        subtitle="Онлайн-игр пока не было."
+        backTo={getLeaderboardRoute()}
+      >
+        <section className={modeToggleClassName}>
+          <SegmentedControl
+            options={[
+              { value: "offline", label: "Офлайн" },
+              { value: "online", label: "Онлайн" }
+            ]}
+            value={mode}
+            onChange={(nextMode) => updateMode(nextMode as ProfileMode)}
+          />
+        </section>
+        <InfoCard
+          title="Пока нет данных"
+          description="Как только у игрока появятся завершённые онлайн-игры, здесь появятся результат и динамика."
+        />
+      </ScreenLayout>
+    );
+  }
+
+  if (mode === "online" && virtualProfile) {
+    const { recentResults, stats, tableStats, user } = virtualProfile;
+    const onlineResultStats = getVirtualRecentMoneyStats(recentResults);
+
+    return (
+      <ScreenLayout>
+        <section className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,11rem)] gap-4">
+          <div className="min-w-0">
+            <h2 className="truncate font-display text-[2.4rem] font-semibold leading-none text-white">
+              {user.displayName}
+            </h2>
+            <p className="mt-3 text-[1.1rem] text-muted">
+              {user.username ? `@${user.username}` : "Онлайн-статистика по завершённым играм"}
+            </p>
+            <p className="mt-2 text-sm font-semibold text-accent">{virtualProfile.style.archetype.title}</p>
+          </div>
+          <div className={cn(cardClassName, "flex flex-col justify-center px-4 py-4")}>
+            <div className="flex items-center gap-2">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted">Poker Score</p>
+              <InfoIconButton label="Что такое Poker Score" onClick={() => setIsPokerScoreInfoOpen(true)} />
+            </div>
+            <p className="mt-3 font-display text-[3rem] font-semibold leading-none text-accent">
+              {stats.onlinePokerScore}
+            </p>
+          </div>
+        </section>
+
+        <section className={modeToggleClassName}>
+          <SegmentedControl
+            options={[
+              { value: "offline", label: "Офлайн" },
+              { value: "online", label: "Онлайн" }
+            ]}
+            value={mode}
+            onChange={(nextMode) => updateMode(nextMode as ProfileMode)}
+          />
+        </section>
+
+        <section className="grid grid-cols-2 gap-3">
+          <Metric
+            className={cardClassName}
+            label="Общий итог"
+            value={formatSignedCurrency(stats.netEstimatedMinor, "RUB")}
+            valueClassName={getToneClass(stats.netEstimatedMinor)}
+          />
+          <Metric className={cardClassName} label="Игр сыграно" value={String(tableStats.tablesPlayed)} />
+          <Metric className={cardClassName} label="ROI" value={formatPercentFromBps(tableStats.roiBps)} />
+          <Metric
+            className={cardClassName}
+            label="Победы"
+            value={formatPercentFromBps(tableStats.tableWinRateBps)}
+          />
+        </section>
+
+        <VirtualPlayerArchetypeCard style={virtualProfile.style} />
+
+        <VirtualStyleStatsCard
+          isExpanded={isStyleStatsExpanded}
+          onInfoClick={() => setIsStyleStatsInfoOpen(true)}
+          onToggleExpanded={() => setIsStyleStatsExpanded((current) => !current)}
+          style={virtualProfile.style}
+        />
+
+        <section className={cn(cardClassName, "space-y-4")}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-[1.4rem] font-semibold text-white">Динамика результата</h3>
+              <p className="mt-1 text-sm text-muted">Последние завершённые онлайн-игры, от старых к новым.</p>
+            </div>
+            {recentResults.length > 0 ? (
+              <p className={cn("text-lg font-semibold", getToneClass(getLatestVirtualCumulativeNetEstimatedMinor(recentResults)))}>
+                {formatSignedCurrency(getLatestVirtualCumulativeNetEstimatedMinor(recentResults), "RUB")}
+              </p>
+            ) : null}
+          </div>
+          <VirtualProfileTrendChart recentResults={recentResults} />
+        </section>
+
+        <section className={cn(cardClassName, "space-y-4")}>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-white">Последние результаты</h3>
+          </div>
+          {recentResults.length === 0 ? (
+            <EmptyStatePanel text="Последние результаты появятся после завершённых онлайн-игр." />
+          ) : (
+            <>
+              <StatRow
+                label="Лучший стол"
+                value={formatSignedCurrency(onlineResultStats.bestMinor, "RUB")}
+                valueClassName={getToneClass(onlineResultStats.bestMinor)}
+              />
+              <StatRow
+                label="Самый сложный стол"
+                value={formatSignedCurrency(onlineResultStats.worstMinor, "RUB")}
+                valueClassName={getToneClass(onlineResultStats.worstMinor)}
+              />
+              <StatRow
+                label="Средний результат"
+                value={formatSignedCurrency(onlineResultStats.averageMinor, "RUB")}
+                valueClassName={getToneClass(onlineResultStats.averageMinor)}
+              />
+              <StatRow
+                label="Столов в плюсе"
+                value={`${tableStats.tablesWon}/${tableStats.tablesPlayed}`}
+              />
+            </>
+          )}
+        </section>
+        <StyleStatsInfoModal open={isStyleStatsInfoOpen} onOpenChange={setIsStyleStatsInfoOpen} />
+      </ScreenLayout>
+    );
+  }
+
+  const { recentGames, stats, user } = profile!;
 
   return (
     <ScreenLayout>
@@ -913,11 +1541,25 @@ function PlayerProfileScreen(): JSX.Element {
           </p>
         </div>
         <div className={cn(cardClassName, "flex flex-col justify-center px-4 py-4")}>
-          <p className="text-xs uppercase tracking-[0.18em] text-muted">Poker Score</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted">Poker Score</p>
+            <InfoIconButton label="Что такое Poker Score" onClick={() => setIsPokerScoreInfoOpen(true)} />
+          </div>
           <p className="mt-3 font-display text-[3rem] font-semibold leading-none text-accent">
             {stats.pokerScore}
           </p>
         </div>
+      </section>
+
+      <section className={modeToggleClassName}>
+        <SegmentedControl
+          options={[
+            { value: "offline", label: "Офлайн" },
+            { value: "online", label: "Онлайн" }
+          ]}
+          value={mode}
+          onChange={(nextMode) => updateMode(nextMode as ProfileMode)}
+        />
       </section>
 
       <section className="grid grid-cols-2 gap-3">
@@ -937,7 +1579,24 @@ function PlayerProfileScreen(): JSX.Element {
       </section>
 
       <section className={cn(cardClassName, "space-y-4")}>
-        <h3 className="text-[1.9rem] font-semibold text-white">Последние результаты</h3>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[1.4rem] font-semibold text-white">Динамика выигрышей</h3>
+            <p className="mt-1 text-sm text-muted">Последние 10 закрытых игр, от старых к новым.</p>
+          </div>
+          {recentGames.length > 0 ? (
+            <p className={cn("text-lg font-semibold", getToneClass(getLatestCumulativeProfitMinor(recentGames)))}>
+              {formatSignedCurrency(getLatestCumulativeProfitMinor(recentGames), recentGames[0]!.currency)}
+            </p>
+          ) : null}
+        </div>
+        <ProfileTrendChart recentGames={recentGames} />
+      </section>
+
+      <section className={cn(cardClassName, "space-y-4")}>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold text-white">Последние результаты</h3>
+        </div>
         <StatRow
           label="Лучшая игра"
           value={formatSignedMinorStat(stats.bestGameMinor)}
@@ -948,41 +1607,14 @@ function PlayerProfileScreen(): JSX.Element {
           value={formatSignedMinorStat(stats.worstGameMinor)}
           valueClassName={getToneClass(stats.worstGameMinor)}
         />
-        <StatRow label="Средний результат" value={formatSignedMinorStat(stats.avgProfitMinor)} valueClassName={getToneClass(stats.avgProfitMinor)} />
+        <StatRow
+          label="Средний результат"
+          value={formatSignedMinorStat(stats.avgProfitMinor)}
+          valueClassName={getToneClass(stats.avgProfitMinor)}
+        />
         <StatRow label="Стабильность" value={formatPercentFromBps(stats.stabilityScoreBps)} />
       </section>
-
-      <section className="space-y-3">
-        <SectionHeading
-          title="Последние игры"
-          description="Здесь собраны недавние завершённые столы этого игрока."
-        />
-        {recentGames.length === 0 ? (
-          <InfoCard
-            title="Пока без истории"
-            description="Как только у игрока появятся завершённые игры, они появятся здесь."
-          />
-        ) : null}
-        {recentGames.map((game: GetPlayerProfileResponseDto["recentGames"][number]) => (
-          <article key={game.roomId} className={cn(mutedCardClassName, "px-4 py-4")}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-xl font-semibold text-white">{game.title}</p>
-                <p className="mt-1 text-sm text-muted">{formatDate(game.closedAt)}</p>
-              </div>
-              <span className="rounded-full border border-white/10 bg-surfaceHigher px-3 py-1 text-xs text-muted">
-                {game.playersCount} {getPlayersLabel(game.playersCount)}
-              </span>
-            </div>
-            <p className="mt-3 text-sm">
-              Результат:{" "}
-              <span className={getToneClass(game.myNetResultMinor)}>
-                {formatMinorMoney(game.myNetResultMinor, game.currency)}
-              </span>
-            </p>
-          </article>
-        ))}
-      </section>
+      <PokerScoreInfoModal open={isPokerScoreInfoOpen} onOpenChange={setIsPokerScoreInfoOpen} />
     </ScreenLayout>
   );
 }
@@ -990,11 +1622,13 @@ function PlayerProfileScreen(): JSX.Element {
 function CreateRoomScreen(): JSX.Element {
   const navigate = useNavigate();
   const { state } = useSession();
+  const { refreshRooms } = useRoomsList();
   const [values, setValues] = useState<CreateRoomFormValues>({
     title: "",
     currency: "RUB",
-    rebuyAmount: "",
-    startingStack: "",
+    buyInChips: "",
+    rebuyChips: "",
+    chipsPerCurrencyUnit: "",
     rebuyPermission: "PLAYER_SELF"
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1009,7 +1643,7 @@ function CreateRoomScreen(): JSX.Element {
     const payload = buildCreateRoomPayload(values);
 
     if (validationMessage || !payload) {
-      setErrorMessage(validationMessage ?? "Проверьте сумму ребая и стартовый стек");
+      setErrorMessage(validationMessage ?? "Проверьте закуп, ребай и курс");
       return;
     }
 
@@ -1025,6 +1659,7 @@ function CreateRoomScreen(): JSX.Element {
 
     try {
       const response = await createRoom(state.accessToken, payload);
+      await refreshRooms();
       void navigate(getRoomRoute(response.room.id));
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "Не получилось создать стол"));
@@ -1076,34 +1711,44 @@ function CreateRoomScreen(): JSX.Element {
         <section className="glass-card rounded-2xl border border-accent/25 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(20,20,20,0.7))] px-4 py-4">
           <p className="flex items-center gap-2 text-sm font-medium text-accent">
             <MaterialIcon icon="add_circle" />
-            Сумма ребая
+            Сумма входа
           </p>
           <div className="mt-4 flex items-end justify-between gap-3">
             <input
               className="w-full bg-transparent text-[2.3rem] font-semibold leading-none text-white outline-none placeholder:text-white/25"
-              inputMode="decimal"
-              value={values.rebuyAmount}
+              inputMode="numeric"
+              value={values.buyInChips}
               onChange={(event) =>
-                setValues((current) => ({ ...current, rebuyAmount: event.target.value }))
+                setValues((current) => ({ ...current, buyInChips: event.target.value }))
               }
-              placeholder="1000"
+              placeholder="10000"
             />
-            <span className="pb-1 text-[1.8rem] font-semibold text-accent">
-              {getCurrencySymbol(values.currency)}
-            </span>
+            <span className="pb-1 text-sm font-semibold uppercase text-accent">фишек</span>
           </div>
-          <p className="mt-3 text-sm leading-6 text-muted">Фиксированная сумма для каждого нового ребая.</p>
+          <p className="mt-3 text-sm leading-6 text-muted">Сколько фишек получает игрок при входе за стол.</p>
         </section>
 
-        <Field label="Стартовый стек">
+        <Field label="Курс фишек к валюте">
           <input
             className={inputClassName}
             inputMode="numeric"
-            value={values.startingStack}
+            value={values.chipsPerCurrencyUnit}
             onChange={(event) =>
-              setValues((current) => ({ ...current, startingStack: event.target.value }))
+              setValues((current) => ({ ...current, chipsPerCurrencyUnit: event.target.value }))
             }
-            placeholder="Например, 10000"
+            placeholder="Например, 100"
+          />
+        </Field>
+
+        <Field label="Ребай в фишках">
+          <input
+            className={inputClassName}
+            inputMode="numeric"
+            value={values.rebuyChips}
+            onChange={(event) =>
+              setValues((current) => ({ ...current, rebuyChips: event.target.value }))
+            }
+            placeholder="Например, 2500"
           />
         </Field>
 
@@ -1168,9 +1813,10 @@ function CreateRoomScreen(): JSX.Element {
         <section className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
           <p className="text-sm font-semibold text-white">Что получится</p>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <Metric label="Ребай" value={values.rebuyAmount.trim() || "Не задан"} />
-            <Metric label="Стек" value={values.startingStack.trim() || "Не задан"} />
+            <Metric label="Вход" value={values.buyInChips.trim() || "Не задан"} />
+            <Metric label="Ребай" value={values.rebuyChips.trim() || "Не задан"} />
             <Metric label="Валюта" value={getCurrencyLabel(values.currency)} />
+            <Metric label="Курс" value={values.chipsPerCurrencyUnit.trim() || "Не задан"} />
             <Metric label="Режим" value={getRebuyPermissionLabel(values.rebuyPermission)} />
           </div>
         </section>
@@ -1192,6 +1838,7 @@ function CreateRoomScreen(): JSX.Element {
 function RoomScreen(): JSX.Element {
   const { roomId = "" } = useParams();
   const { state } = useSession();
+  const { refreshRooms } = useRoomsList();
   const [roomState, setRoomState] = useState<LoadState<GetRoomResponseDto>>({
     status: "idle",
     data: null,
@@ -1202,6 +1849,9 @@ function RoomScreen(): JSX.Element {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [addingRebuyForPlayerId, setAddingRebuyForPlayerId] = useState<string | null>(null);
   const [cancellingRebuyId, setCancellingRebuyId] = useState<string | null>(null);
+  const [leaveDialogState, setLeaveDialogState] = useState<LeaveDialogState | null>(null);
+  const [isLeavingRoom, setIsLeavingRoom] = useState(false);
+  const [isReturningToRoom, setIsReturningToRoom] = useState(false);
   const [confirmationState, setConfirmationState] = useState<RoomConfirmationState | null>(null);
   const [roomMode, setRoomMode] = useState<RoomMode>("overview");
   const [settlementDraftValues, setSettlementDraftValues] = useState<Record<string, string>>({});
@@ -1294,6 +1944,9 @@ function RoomScreen(): JSX.Element {
     setSettlementDraftValues({});
     setSettlementPreviewState(createInitialSettlementPreviewState());
     setIsClosingSettlement(false);
+    setLeaveDialogState(null);
+    setIsLeavingRoom(false);
+    setIsReturningToRoom(false);
   }, [roomId]);
 
   useEffect(() => {
@@ -1310,13 +1963,13 @@ function RoomScreen(): JSX.Element {
       return;
     }
 
-    const activePlayers = getActivePlayers(roomData.players);
+    const settlementPlayers = getSettlementPlayers(roomData.players);
 
     setSettlementDraftValues((current) => {
       const nextValues: Record<string, string> = {};
 
-      for (const player of activePlayers) {
-        nextValues[player.id] = current[player.id] ?? getInitialFinalAmountInput(player.finalAmountMinor);
+      for (const player of settlementPlayers) {
+        nextValues[player.id] = current[player.id] ?? getInitialFinalAmountInput(player.finalAmountChips);
       }
 
       return areSettlementInputsEqual(current, nextValues) ? current : nextValues;
@@ -1324,15 +1977,15 @@ function RoomScreen(): JSX.Element {
   }, [roomState.data]);
 
   useEffect(() => {
-    if (!state.accessToken || !roomId || roomState.data?.room.status !== "RUNNING") {
+    if (!state.accessToken || !roomId || !shouldPollRoomStatus(roomState.data?.room.status)) {
       return;
     }
 
     const accessToken = state.accessToken;
     let isCancelled = false;
     const intervalId = window.setInterval(() => {
-      void Promise.all([getRoom(accessToken, roomId), getRebuyHistory(accessToken, roomId)])
-        .then(([data, history]) => {
+      void getRoom(accessToken, roomId)
+        .then(async (data) => {
           if (isCancelled) {
             return;
           }
@@ -1342,6 +1995,18 @@ function RoomScreen(): JSX.Element {
             data,
             errorMessage: null
           });
+
+          if (data.room.status !== "RUNNING") {
+            setHistoryState(createInitialHistoryState());
+            return;
+          }
+
+          const history = await getRebuyHistory(accessToken, roomId);
+
+          if (isCancelled) {
+            return;
+          }
+
           setHistoryState({
             status: "ready",
             items: history.rebuys,
@@ -1381,11 +2046,14 @@ function RoomScreen(): JSX.Element {
 
     try {
       await startRoom(state.accessToken, roomId);
-      await refreshRoomState(state.accessToken, roomId, {
-        setHistoryLoading: true,
-        setRoomState,
-        setHistoryState
-      });
+      await Promise.all([
+        refreshRoomState(state.accessToken, roomId, {
+          setHistoryLoading: true,
+          setRoomState,
+          setHistoryState
+        }),
+        refreshRooms()
+      ]);
     } catch (error) {
       setRoomState((current) => ({
         status: "error",
@@ -1475,9 +2143,95 @@ function RoomScreen(): JSX.Element {
       idempotencyKey: createIdempotencyKey(),
       roomPlayerId: roomData.room.myPlayerId,
       playerName: myPlayer?.displayName ?? "Вы",
-      amountMinor: roomData.room.rebuyAmountMinor,
+      amountChips: roomData.room.rebuyChips,
       isSelf: true
     });
+  }
+
+  function handleOpenLeaveDialog(): void {
+    const roomData = roomState.data;
+    if (!roomData) {
+      return;
+    }
+
+    const myPlayer = getMyPlayer(roomData.players, roomData.room.myPlayerId);
+    setLeaveDialogState({
+      finalAmountInput: getInitialFinalAmountInput(myPlayer?.finalAmountChips ?? "0"),
+      errorMessage: null
+    });
+  }
+
+  async function handleSubmitLeaveRoom(): Promise<void> {
+    if (!state.accessToken || !roomId || !leaveDialogState) {
+      return;
+    }
+
+    const payload = parseLeaveFinalAmountPayload(leaveDialogState.finalAmountInput);
+    if (!payload) {
+      setLeaveDialogState((current) =>
+        current
+          ? {
+              ...current,
+              errorMessage: "Укажите, сколько фишек осталось. Подойдет целое число, например 7500."
+            }
+          : current
+      );
+      return;
+    }
+
+    setIsLeavingRoom(true);
+
+    try {
+      await leaveRoom(state.accessToken, roomId, payload);
+      setLeaveDialogState(null);
+      await Promise.all([
+        refreshRoomState(state.accessToken, roomId, {
+          setHistoryLoading: true,
+          setRoomState,
+          setHistoryState
+        }),
+        refreshRooms()
+      ]);
+    } catch (error) {
+      setLeaveDialogState((current) =>
+        current
+          ? {
+              ...current,
+              errorMessage: getErrorMessage(error, "Не получилось сохранить выход из игры")
+            }
+          : current
+      );
+    } finally {
+      setIsLeavingRoom(false);
+    }
+  }
+
+  async function handleReturnToRoom(): Promise<void> {
+    if (!state.accessToken || !roomId) {
+      return;
+    }
+
+    setIsReturningToRoom(true);
+
+    try {
+      await returnToRoom(state.accessToken, roomId);
+      await Promise.all([
+        refreshRoomState(state.accessToken, roomId, {
+          setHistoryLoading: true,
+          setRoomState,
+          setHistoryState
+        }),
+        refreshRooms()
+      ]);
+    } catch (error) {
+      setRoomState((current) => ({
+        status: "error",
+        data: current.data,
+        errorMessage: getErrorMessage(error, "Не получилось вернуться за стол")
+      }));
+    } finally {
+      setIsReturningToRoom(false);
+    }
   }
 
   function handleOpenAdminRebuy(player: RoomPlayerDto): void {
@@ -1490,7 +2244,7 @@ function RoomScreen(): JSX.Element {
       idempotencyKey: createIdempotencyKey(),
       roomPlayerId: player.id,
       playerName: player.displayName,
-      amountMinor: roomState.data.room.rebuyAmountMinor,
+      amountChips: roomState.data.room.rebuyChips,
       isSelf: player.id === roomState.data.room.myPlayerId
     });
   }
@@ -1501,7 +2255,7 @@ function RoomScreen(): JSX.Element {
       idempotencyKey: createIdempotencyKey(),
       rebuyId: rebuy.id,
       playerName: rebuy.playerName,
-      amountMinor: rebuy.amountMinor
+      amountChips: rebuy.amountChips
     });
   }
 
@@ -1560,10 +2314,13 @@ function RoomScreen(): JSX.Element {
       await closeSettlement(state.accessToken, roomId, settlementPreviewPayload);
       setRoomMode("overview");
       setSettlementPreviewState(createInitialSettlementPreviewState());
-      await refreshRoomState(state.accessToken, roomId, {
-        setRoomState,
-        setHistoryState
-      });
+      await Promise.all([
+        refreshRoomState(state.accessToken, roomId, {
+          setRoomState,
+          setHistoryState
+        }),
+        refreshRooms()
+      ]);
     } catch (error) {
       setSettlementPreviewState((current) => ({
         status: "error",
@@ -1638,7 +2395,7 @@ function RoomScreen(): JSX.Element {
     !settlementDraftSummary.hasInvalidValues &&
     settlementPreviewState.status === "ready" &&
     settlementPreviewState.draftKey === settlementDraftKey &&
-    settlementPreviewState.data.differenceMinor === "0" &&
+    settlementPreviewState.data.differenceChips === "0" &&
     !isClosingSettlement;
   const isConfirmationPending =
     confirmationState?.kind === "create-rebuy"
@@ -1660,8 +2417,8 @@ function RoomScreen(): JSX.Element {
           canStart={canStart}
           data={roomState.data!}
           isStarting={isStarting}
-          onCopyInvite={() => void copyToClipboard(room.inviteUrl)}
-          onShareInvite={() => shareInvite(room.inviteUrl)}
+          onCopyInvite={() => void copyToClipboard(room.inviteCode.toUpperCase())}
+          onShareInvite={() => shareInvite(room.title, room.inviteCode, room.inviteUrl)}
           onStart={() => void handleStart()}
         />
       ) : null}
@@ -1672,8 +2429,12 @@ function RoomScreen(): JSX.Element {
           data={roomState.data!}
           historyState={historyState}
           isCreatingSelfRebuy={isSelfRebuyPending}
+          isLeavingRoom={isLeavingRoom}
           isHistoryOpen={isHistoryOpen}
+          isReturningToRoom={isReturningToRoom}
           selfRebuyHint={getSelfRebuyHint(room)}
+          onLeaveRoom={handleOpenLeaveDialog}
+          onReturnToRoom={() => void handleReturnToRoom()}
           onSelfRebuy={handleOpenSelfRebuy}
           onToggleHistory={() => setIsHistoryOpen((current) => !current)}
         />
@@ -1686,9 +2447,13 @@ function RoomScreen(): JSX.Element {
           data={roomState.data!}
           historyState={historyState}
           isHistoryOpen={isHistoryOpen}
+          isLeavingRoom={isLeavingRoom}
+          isReturningToRoom={isReturningToRoom}
           onAddRebuy={handleOpenAdminRebuy}
           onCancelRebuy={handleOpenCancelRebuy}
+          onLeaveRoom={handleOpenLeaveDialog}
           onOpenSettlement={() => setRoomMode("settlement")}
+          onReturnToRoom={() => void handleReturnToRoom()}
           onToggleHistory={() => setIsHistoryOpen((current) => !current)}
         />
       ) : null}
@@ -1731,6 +2496,26 @@ function RoomScreen(): JSX.Element {
         onCancel={() => setConfirmationState(null)}
         onConfirm={() => void handleConfirmAction()}
       />
+      <LeaveRoomDialog
+        currency={room.currency}
+        errorMessage={leaveDialogState?.errorMessage ?? null}
+        finalAmountInput={leaveDialogState?.finalAmountInput ?? ""}
+        isPending={isLeavingRoom}
+        roomData={roomState.data!}
+        visible={leaveDialogState !== null}
+        onCancel={() => setLeaveDialogState(null)}
+        onChangeFinalAmount={(value) =>
+          setLeaveDialogState((current) =>
+            current
+              ? {
+                  finalAmountInput: value,
+                  errorMessage: null
+                }
+              : current
+          )
+        }
+        onConfirm={() => void handleSubmitLeaveRoom()}
+      />
     </ScreenLayout>
   );
 }
@@ -1739,8 +2524,15 @@ function JoinRoomScreen(): JSX.Element {
   const navigate = useNavigate();
   const { inviteCode = "" } = useParams();
   const { state } = useSession();
+  const { refreshRooms } = useRoomsList();
+  const [inviteCodeInput, setInviteCodeInput] = useState(() => normalizeInviteCode(inviteCode));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const normalizedInviteCode = normalizeInviteCode(inviteCodeInput);
+
+  useEffect(() => {
+    setInviteCodeInput(normalizeInviteCode(inviteCode));
+  }, [inviteCode]);
 
   async function handleJoin(): Promise<void> {
     if (!state.accessToken) {
@@ -1755,8 +2547,9 @@ function JoinRoomScreen(): JSX.Element {
 
     try {
       const response = await joinRoom(state.accessToken, {
-        inviteCode
+        inviteCode: normalizedInviteCode
       });
+      await refreshRooms();
       void navigate(getRoomRoute(response.roomId));
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "Не получилось присоединиться к игре"));
@@ -1767,28 +2560,38 @@ function JoinRoomScreen(): JSX.Element {
 
   return (
     <ScreenLayout banner={getSessionBanner(state.status, state.errorMessage)}>
-      <section className="flex min-h-[calc(100dvh-12rem)] flex-col justify-center gap-5 pb-4 text-center">
-        <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full border-2 border-accent bg-[radial-gradient(circle,rgba(78,222,163,0.14),rgba(18,18,18,0.95))] text-white shadow-glow">
-          <span className="font-display text-[2rem] font-semibold">
-            {getInviteInitials(inviteCode)}
+      <section className="flex flex-col gap-4 pb-3 pt-1 text-center">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-2 border-accent bg-[radial-gradient(circle,rgba(78,222,163,0.14),rgba(18,18,18,0.95))] text-white shadow-glow">
+          <span className="font-display text-[1.6rem] font-semibold">
+            {getInviteInitials(normalizedInviteCode)}
           </span>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2">
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">
             Приглашение в игру
           </p>
-          <h2 className="font-display text-[2.5rem] font-semibold leading-tight text-white">
+          <h2 className="font-display text-[2rem] font-semibold leading-tight text-white">
             Готовы присоединиться?
           </h2>
-          <p className="mx-auto max-w-[20rem] text-base leading-7 text-muted">
-            Добавим вас к столу по коду приглашения и сразу откроем текущую игру.
+          <p className="mx-auto max-w-[18rem] text-sm leading-6 text-muted">
+            Введите код и сразу откроем игру.
           </p>
         </div>
 
-        <section className="grid grid-cols-2 gap-3">
-          <Metric className={cardClassName} label="Код" value={inviteCode.toUpperCase()} />
-          <Metric className={cardClassName} label="Статус" value="Ожидает входа" />
-        </section>
+        <label className="block text-left">
+          <span className={labelClassName}>Код приглашения</span>
+          <input
+            autoCapitalize="characters"
+            autoComplete="off"
+            className={cn(inputClassName, "uppercase tracking-[0.18em]")}
+            inputMode="text"
+            onChange={(event) => setInviteCodeInput(normalizeInviteCode(event.target.value))}
+            placeholder="Например, PT2025"
+            spellCheck={false}
+            type="text"
+            value={inviteCodeInput}
+          />
+        </label>
 
         {errorMessage ? (
           <p className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
@@ -1797,7 +2600,11 @@ function JoinRoomScreen(): JSX.Element {
         ) : null}
 
         <div className="space-y-3">
-          <Button className="w-full" disabled={isSubmitting} onClick={() => void handleJoin()}>
+          <Button
+            className="w-full"
+            disabled={isSubmitting || normalizedInviteCode.length === 0}
+            onClick={() => void handleJoin()}
+          >
             <MaterialIcon icon="login" />
             {isSubmitting ? "Подключаем стол" : "Присоединиться к игре"}
           </Button>
@@ -1894,7 +2701,7 @@ function ConfirmationDialog({
     return null;
   }
 
-  const amountText = formatMinorMoney(confirmationState.amountMinor, currency);
+  const amountText = formatChipsWithApprox(confirmationState.amountChips, currency, null);
   const title =
     confirmationState.kind === "create-rebuy"
       ? confirmationState.isSelf
@@ -1913,7 +2720,7 @@ function ConfirmationDialog({
     confirmationState.kind === "create-rebuy" ? "Сохраняем ребай" : "Отменяем ребай";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/70 px-4 pb-4 pt-10 sm:items-center sm:justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
       <div className="glass-card w-full rounded-[1.5rem] p-5 shadow-2xl sm:max-w-md">
         <p className="font-display text-[1.65rem] font-semibold leading-tight text-white">{title}</p>
         <p className="mt-3 text-sm leading-6 text-muted">{description}</p>
@@ -1930,22 +2737,77 @@ function ConfirmationDialog({
   );
 }
 
-function SectionHeading({
-  title,
-  description,
-  action
+function LeaveRoomDialog({
+  roomData,
+  currency,
+  visible,
+  finalAmountInput,
+  errorMessage,
+  isPending,
+  onChangeFinalAmount,
+  onCancel,
+  onConfirm
 }: {
-  title: string;
-  description: string;
-  action?: ReactNode;
-}): JSX.Element {
+  roomData: GetRoomResponseDto;
+  currency: string;
+  visible: boolean;
+  finalAmountInput: string;
+  errorMessage: string | null;
+  isPending: boolean;
+  onChangeFinalAmount: (value: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}): JSX.Element | null {
+  if (!visible) {
+    return null;
+  }
+
+  const myPlayer = getMyPlayer(roomData.players, roomData.room.myPlayerId);
+  const myRebuys = myPlayer?.rebuyCount ?? 0;
+  const myTotalBuyin = myPlayer?.totalBuyinChips ?? "0";
+
   return (
-    <div className="flex items-end justify-between gap-3">
-      <div>
-        <h2 className="font-display text-[2rem] font-semibold leading-tight text-white">{title}</h2>
-        <p className="mt-1 text-sm text-muted">{description}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
+      <div className="glass-card w-full rounded-[1.5rem] p-5 shadow-2xl sm:max-w-md">
+        <p className="font-display text-[1.65rem] font-semibold leading-tight text-white">Выйти со стола?</p>
+        <p className="mt-3 text-sm leading-6 text-muted">
+          Мы зафиксируем ваши фишки, чтобы итоговый расчет остался точным.
+        </p>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <Metric label="Ребаи" value={String(myRebuys)} />
+          <Metric
+            label="Общий закуп"
+            value={formatChipsWithApprox(myTotalBuyin, currency, roomData.room.chipsPerCurrencyUnit)}
+          />
+        </div>
+
+        <label className="mt-4 block">
+          <span className={labelClassName}>Сколько фишек осталось</span>
+          <input
+            className={inputClassName}
+            inputMode="decimal"
+            onChange={(event) => onChangeFinalAmount(event.target.value)}
+            placeholder="Например, 4 800"
+            value={finalAmountInput}
+          />
+        </label>
+
+        {errorMessage ? (
+          <p className="mt-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+            {errorMessage}
+          </p>
+        ) : null}
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <Button className={cn(secondaryButtonClassName, "w-full")} disabled={isPending} onClick={onCancel}>
+            Остаться
+          </Button>
+          <Button className="w-full" disabled={isPending} onClick={onConfirm}>
+            {isPending ? "Сохраняем" : "Выйти со стола"}
+          </Button>
+        </div>
       </div>
-      {action}
     </div>
   );
 }
@@ -1969,6 +2831,437 @@ function Metric({
   );
 }
 
+function SegmentedControl({
+  options,
+  value,
+  onChange
+}: {
+  options: Array<{
+    value: string;
+    label: string;
+  }>;
+  value: string;
+  onChange: (value: string) => void;
+}): JSX.Element {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          className={cn(
+            "min-h-9 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+            value === option.value
+              ? "border-white/16 bg-white text-[#111313]"
+              : "border-transparent bg-transparent text-muted hover:bg-white/[0.04] hover:text-white"
+          )}
+          onClick={() => onChange(option.value)}
+          type="button"
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PokerTableLogo({ className }: { className?: string }): JSX.Element {
+  return (
+    <img
+      alt="Poker Table"
+      className={cn("h-12 w-12 object-contain", className)}
+      src={pokerTableLogoPath}
+    />
+  );
+}
+
+function InfoIconButton({
+  label,
+  onClick
+}: {
+  label: string;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      aria-label={label}
+      className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-muted transition hover:border-accent/50 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick();
+      }}
+      type="button"
+    >
+      <MaterialIcon icon="info" />
+    </button>
+  );
+}
+
+function AppSplashScreen({ visible }: { visible: boolean }): JSX.Element | null {
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <>
+      <style>
+        {`
+          @keyframes poker-table-loader {
+            0% { transform: translateX(-110%); }
+            50% { transform: translateX(0%); }
+            100% { transform: translateX(110%); }
+          }
+        `}
+      </style>
+      <div className="fixed inset-0 z-50 flex flex-col bg-[#0f0f0f]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(78,222,163,0.14),transparent_52%)]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-[radial-gradient(circle_at_bottom,rgba(78,222,163,0.08),transparent_62%)]" />
+        <div className="relative flex flex-1 flex-col items-center justify-center px-6">
+          <PokerTableLogo className="h-24 w-24" />
+          <h1 className="mt-6 font-display text-[2.2rem] font-semibold leading-none text-white">Poker Table</h1>
+          <div className="mt-8 h-1 w-32 overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full w-full rounded-full bg-accent"
+              style={{
+                animation: "poker-table-loader 1.7s ease-in-out infinite"
+              }}
+            />
+          </div>
+        </div>
+        <div className="relative px-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+            Clean utility for private games
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PokerScoreInfoModal({
+  open,
+  onOpenChange
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}): JSX.Element | null {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        onOpenChange(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [onOpenChange, open]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm"
+      onClick={() => onOpenChange(false)}
+    >
+      <div
+        className="absolute inset-x-2 mx-auto flex w-auto max-w-2xl flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#171717]/95 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          top: "max(7.5rem, calc(env(safe-area-inset-top) + 5.75rem))",
+          bottom: "max(6.75rem, calc(env(safe-area-inset-bottom) + 6.5rem))"
+        }}
+      >
+        <div className="flex items-start justify-between gap-4 px-5 pb-4 pt-5">
+          <div className="min-w-0">
+            <h2 className="font-display text-[1.55rem] font-semibold leading-tight text-white">
+              Что такое Poker Score?
+            </h2>
+          </div>
+          <button
+            aria-label="Закрыть"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-muted transition hover:border-accent/50 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onClick={() => onOpenChange(false)}
+            type="button"
+          >
+            <MaterialIcon icon="close" />
+          </button>
+        </div>
+
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-5 pb-6"
+          style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+        >
+          <p className="text-sm leading-6 text-muted">
+            Poker Score — рейтинг игрока от 0 до 100. Он показывает качество игры на дистанции и
+            складывается из четырёх коротких метрик.
+          </p>
+
+          <div className="space-y-3">
+            <CompactInfoBlock
+              title="40% ROI Score"
+              description="Эффективность игры: чистая прибыль / сумма закупов × 100%."
+            />
+            <CompactInfoBlock title="30% Win Rate" description="Процент плюсовых игр на дистанции." />
+            <CompactInfoBlock
+              title="20% Stability Score"
+              description="Стабильность результатов без сильных минусовых сессий."
+            />
+            <CompactInfoBlock
+              title="10% Volume Confidence"
+              description="Доверие к статистике по количеству сыгранных игр."
+            />
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-accent/90">Формула</p>
+            <p className="mt-2 text-sm leading-6 text-white">
+              Poker Score = 40% ROI Score + 30% Win Rate + 20% Stability Score + 10% Volume Confidence
+            </p>
+          </div>
+
+          <p className="mt-4 text-sm leading-6 text-muted">
+            Total Profit показывает итог в деньгах, а Poker Score помогает понять, насколько стабильно
+            и эффективно игрок держит дистанцию.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VirtualPlayerArchetypeCard({
+  style
+}: {
+  style: GetVirtualPlayerProfileResponseDto["style"];
+}): JSX.Element {
+  return (
+    <section className={cn(cardClassName, "space-y-3")}>
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Стиль игрока</p>
+        <h3 className="mt-2 text-[1.65rem] font-semibold leading-tight text-white">
+          {style.archetype.title}
+        </h3>
+      </div>
+      <p className="text-sm leading-6 text-muted">{style.archetype.description}</p>
+      {!style.sample.isEnoughData ? (
+        <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-muted">
+          Сыграно {style.sample.handsDealt}/{style.sample.minimumRequired} раздач для точного стиля.
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function VirtualStyleStatsCard({
+  isExpanded,
+  onInfoClick,
+  onToggleExpanded,
+  style
+}: {
+  isExpanded: boolean;
+  onInfoClick: () => void;
+  onToggleExpanded: () => void;
+  style: GetVirtualPlayerProfileResponseDto["style"];
+}): JSX.Element {
+  const compactStats = [
+    {
+      label: "VPIP",
+      value: formatPercentFromBps(style.styleStats.vpipBps),
+      description: "Входит в банк"
+    },
+    {
+      label: "PFR",
+      value: formatPercentFromBps(style.styleStats.pfrBps),
+      description: "Рейзит до флопа"
+    },
+    {
+      label: "Агрессия",
+      value: formatAggressionFactor(style.styleStats.aggressionFactorBps),
+      description: "Давит ставками"
+    },
+    {
+      label: "BB/100",
+      value: formatBbPer100(style.styleStats.bbPer100Bps),
+      description: "Результат на дистанции"
+    },
+    {
+      label: "Вскрытия",
+      value: formatNullableStylePercent(style.styleStats.showdownWinRateBps, "Нет данных"),
+      description: "Победы на шоудауне"
+    },
+    {
+      label: "All-in",
+      value: formatNullableStylePercent(style.styleStats.allInWinRateBps, "Нет all-in"),
+      description: "Победы в all-in"
+    }
+  ];
+  const expandedStats = [
+    ...compactStats,
+    {
+      label: "Fold to Raise",
+      value: formatNullableStylePercent(style.styleStats.foldToRaiseBps, "Нет ситуаций"),
+      description: "Сдаётся на давление"
+    },
+    {
+      label: "Showdown Rate",
+      value: formatPercentFromBps(style.styleStats.showdownRateBps),
+      description: "Доходит до вскрытия"
+    },
+    {
+      label: "Средний банк",
+      value: `${formatChips(style.styleStats.averagePotWonChips)} фишек`,
+      description: "Средний выигранный банк"
+    },
+    {
+      label: "Крупный банк",
+      value: `${formatChips(style.styleStats.biggestPotWonChips)} фишек`,
+      description: "Самый большой выигрыш"
+    },
+    {
+      label: "Скорость",
+      value: `${style.styleStats.averageDecisionTimeSeconds} сек`,
+      description: "Среднее решение"
+    },
+    {
+      label: "Напоминания",
+      value: String(style.styleStats.remindersReceived),
+      description: "Сколько раз ждали ход"
+    },
+    {
+      label: "Автоходы",
+      value: String(style.styleStats.autoActionsCount),
+      description: "Пропущенные решения"
+    }
+  ];
+  const stats = isExpanded ? expandedStats : compactStats;
+
+  return (
+    <section className={cn(cardClassName, "space-y-4")}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+            Статистика стиля
+          </p>
+          <h3 className="mt-2 text-[1.35rem] font-semibold text-white">Как играет за столом</h3>
+        </div>
+        <InfoIconButton label="Что означают показатели стиля" onClick={onInfoClick} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        {stats.map((item) => (
+          <div key={`${item.label}-${item.description}`} className="rounded-2xl border border-white/8 bg-white/[0.025] px-3 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">{item.label}</p>
+            <p className="mt-1 text-xl font-semibold text-white">{item.value}</p>
+            <p className="mt-1 text-xs leading-5 text-muted">{item.description}</p>
+          </div>
+        ))}
+      </div>
+
+      <Button
+        className={cn("w-full", secondaryButtonClassName)}
+        onClick={onToggleExpanded}
+        type="button"
+      >
+        {isExpanded ? "Скрыть подробности" : "Показать подробнее"}
+      </Button>
+    </section>
+  );
+}
+
+function StyleStatsInfoModal({
+  open,
+  onOpenChange
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}): JSX.Element | null {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        onOpenChange(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [onOpenChange, open]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm" onClick={() => onOpenChange(false)}>
+      <div
+        className="absolute inset-x-2 mx-auto flex w-auto max-w-2xl flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#171717]/95 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          top: "max(7.5rem, calc(env(safe-area-inset-top) + 5.75rem))",
+          bottom: "max(6.75rem, calc(env(safe-area-inset-bottom) + 6.5rem))"
+        }}
+      >
+        <div className="flex items-start justify-between gap-4 px-5 pb-4 pt-5">
+          <h2 className="font-display text-[1.55rem] font-semibold leading-tight text-white">
+            Что означают показатели?
+          </h2>
+          <button
+            aria-label="Закрыть"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-muted transition hover:border-accent/50 hover:text-accent"
+            onClick={() => onOpenChange(false)}
+            type="button"
+          >
+            <MaterialIcon icon="close" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pb-6">
+          <CompactInfoBlock title="VPIP" description="Как часто игрок входит в банк до флопа." />
+          <CompactInfoBlock title="PFR" description="Как часто игрок рейзит до флопа." />
+          <CompactInfoBlock title="Агрессия" description="Соотношение ставок и рейзов к коллам." />
+          <CompactInfoBlock title="Fold to Raise" description="Как часто игрок сбрасывает карты на чужую ставку или рейз." />
+          <CompactInfoBlock title="Showdown Win Rate" description="Как часто игрок выигрывает, когда доходит до вскрытия." />
+          <CompactInfoBlock title="All-in Win Rate" description="Как часто игрок выигрывает all-in ситуации." />
+          <CompactInfoBlock title="BB/100" description="Результат игрока в big blinds на 100 раздач." />
+          <Button className="w-full" onClick={() => onOpenChange(false)} type="button">
+            Понятно
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompactInfoBlock({
+  title,
+  description
+}: {
+  title: string;
+  description: string;
+}): JSX.Element {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-3">
+      <p className="text-sm font-semibold text-white">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-muted">{description}</p>
+    </div>
+  );
+}
+
 function StatRow({
   label,
   value,
@@ -1982,6 +3275,234 @@ function StatRow({
     <div className="flex items-center justify-between gap-4">
       <span className="text-base text-muted">{label}</span>
       <span className={cn("text-[1.05rem] font-semibold text-white", valueClassName)}>{value}</span>
+    </div>
+  );
+}
+
+function ProfileTrendChart({
+  recentGames
+}: {
+  recentGames: GetPlayerProfileResponseDto["recentGames"];
+}): JSX.Element {
+  if (recentGames.length === 0) {
+    return <EmptyStatePanel text="График появится, когда у игрока будут закрытые игры." />;
+  }
+
+  const series = buildCumulativeProfitSeries(recentGames);
+  const chartSeries = buildProfileTrendChartSeries(series);
+  const width = 360;
+  const height = 120;
+  const axisWidth = 72;
+  const paddingX = axisWidth;
+  const paddingY = 12;
+  const values = chartSeries.map((point) => Number(point.valueMinor) / 100);
+  const minValue = Math.min(0, ...values);
+  const maxValue = Math.max(0, ...values);
+  const range = maxValue - minValue || 1;
+  const plotWidth = width - paddingX - 10;
+  const getYForValue = (value: number): number =>
+    height - paddingY - ((value - minValue) / range) * (height - paddingY * 2);
+  const points = chartSeries.map((point, index) => {
+    const x =
+      chartSeries.length === 1
+        ? paddingX + plotWidth / 2
+        : paddingX + (index * plotWidth) / (chartSeries.length - 1);
+    const y = getYForValue(values[index]!);
+
+    return `${x},${y}`;
+  });
+
+  const fillPoints = [`${paddingX},${height - paddingY}`, ...points, `${width - 10},${height - paddingY}`].join(" ");
+  const zeroY = getYForValue(0);
+  const axisTicks = [];
+
+  if (maxValue !== 0) {
+    axisTicks.push({
+      label: formatTrendAxisCurrency(maxValue, recentGames[0]!.currency),
+      y: getYForValue(maxValue)
+    });
+  }
+
+  axisTicks.push({
+    label: formatTrendAxisCurrency(0, recentGames[0]!.currency),
+    y: zeroY
+  });
+
+  if (minValue !== 0) {
+    axisTicks.push({
+      label: formatTrendAxisCurrency(minValue, recentGames[0]!.currency),
+      y: getYForValue(minValue)
+    });
+  }
+  const gridLines = [paddingY, height - paddingY];
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-3">
+        <svg
+          aria-label="График накопительного выигрыша"
+          className="h-32 w-full"
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="none"
+        >
+          {axisTicks.map((tick) => (
+            <text
+              key={`${tick.label}-${tick.y}`}
+              fill="rgba(181, 186, 193, 0.78)"
+              fontSize="10"
+              textAnchor="end"
+              x={axisWidth - 8}
+              y={tick.y + 3}
+            >
+              {tick.label}
+            </text>
+          ))}
+          {gridLines.map((y) => (
+            <line key={y} x1={paddingX} y1={y} x2={width - 10} y2={y} className="stroke-white/10" />
+          ))}
+          <line
+            x1={paddingX}
+            y1={zeroY}
+            x2={width - 10}
+            y2={zeroY}
+            stroke="rgba(255, 255, 255, 0.5)"
+            strokeWidth="1.5"
+          />
+          <polygon points={fillPoints} className="fill-[#4edea3]/12" />
+          <polyline
+            points={points.join(" ")}
+            fill="none"
+            stroke="rgb(78 222 163)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="3"
+          />
+        </svg>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs text-muted">
+        <span>{formatDate(series[0]!.closedAt)}</span>
+        <span>{formatDate(series[series.length - 1]!.closedAt)}</span>
+      </div>
+    </div>
+  );
+}
+
+function VirtualProfileTrendChart({
+  recentResults
+}: {
+  recentResults: GetVirtualPlayerProfileResponseDto["recentResults"];
+}): JSX.Element {
+  if (recentResults.length === 0) {
+    return <EmptyStatePanel text="График появится, когда у игрока будут завершённые онлайн-игры." />;
+  }
+
+  const series = buildVirtualCumulativeProfitSeries(recentResults);
+  const chartSeries = buildVirtualProfileTrendChartSeries(series);
+  const width = 360;
+  const height = 120;
+  const axisWidth = 72;
+  const paddingX = axisWidth;
+  const paddingY = 12;
+  const values = chartSeries.map((point) => Number(point.valueMinor) / 100);
+  const minValue = Math.min(0, ...values);
+  const maxValue = Math.max(0, ...values);
+  const range = maxValue - minValue || 1;
+  const plotWidth = width - paddingX - 10;
+  const getYForValue = (value: number): number =>
+    height - paddingY - ((value - minValue) / range) * (height - paddingY * 2);
+  const points = chartSeries.map((point, index) => {
+    const x =
+      chartSeries.length === 1
+        ? paddingX + plotWidth / 2
+        : paddingX + (index * plotWidth) / (chartSeries.length - 1);
+    const y = getYForValue(values[index]!);
+
+    return `${x},${y}`;
+  });
+
+  const fillPoints = [`${paddingX},${height - paddingY}`, ...points, `${width - 10},${height - paddingY}`].join(" ");
+  const zeroY = getYForValue(0);
+  const lastRecentResult = recentResults[recentResults.length - 1];
+  const axisTicks = [];
+
+  if (maxValue !== 0) {
+    axisTicks.push({
+      label: formatTrendAxisCurrency(maxValue, "RUB"),
+      y: getYForValue(maxValue)
+    });
+  }
+
+  axisTicks.push({
+    label: formatTrendAxisCurrency(0, "RUB"),
+    y: zeroY
+  });
+
+  if (minValue !== 0) {
+    axisTicks.push({
+      label: formatTrendAxisCurrency(minValue, "RUB"),
+      y: getYForValue(minValue)
+    });
+  }
+
+  const gridLines = [paddingY, height - paddingY];
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-3">
+        <svg
+          aria-label="График накопительного результата в онлайн-играх"
+          className="h-32 w-full"
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="none"
+        >
+          {axisTicks.map((tick) => (
+            <text
+              key={`${tick.label}-${tick.y}`}
+              fill="rgba(181, 186, 193, 0.78)"
+              fontSize="10"
+              textAnchor="end"
+              x={axisWidth - 8}
+              y={tick.y + 3}
+            >
+              {tick.label}
+            </text>
+          ))}
+          {gridLines.map((y) => (
+            <line key={y} x1={paddingX} y1={y} x2={width - 10} y2={y} className="stroke-white/10" />
+          ))}
+          <line
+            x1={paddingX}
+            y1={zeroY}
+            x2={width - 10}
+            y2={zeroY}
+            stroke="rgba(255, 255, 255, 0.5)"
+            strokeWidth="1.5"
+          />
+          <polygon points={fillPoints} className="fill-[#4edea3]/12" />
+          <polyline
+            points={points.join(" ")}
+            fill="none"
+            stroke="rgb(78 222 163)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="3"
+          />
+        </svg>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs text-muted">
+        <span>{recentResults[0]?.finishedAt ? formatDate(recentResults[0].finishedAt) : "Первая игра"}</span>
+        <span>
+          {lastRecentResult?.finishedAt ? formatDate(lastRecentResult.finishedAt) : "Последняя игра"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function EmptyStatePanel({ text }: { text: string }): JSX.Element {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4 text-sm leading-6 text-muted">
+      {text}
     </div>
   );
 }
@@ -2034,14 +3555,239 @@ function getRoomStatusText(status: string): string {
   }
 }
 
-function getFilterButtonClass(isActive: boolean, sizeClassName = "px-4"): string {
+function getFilterButtonClass(
+  isActive: boolean,
+  sizeClassName = "px-4",
+  compact = false
+): string {
   return cn(
-    "inline-flex min-h-12 items-center justify-center rounded-xl border text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+    "inline-flex items-center justify-center rounded-xl border font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+    compact ? "min-h-10 text-xs" : "min-h-12 text-[0.95rem]",
     sizeClassName,
     isActive
       ? "border-accent bg-accent text-[#032517]"
       : "border-white/10 bg-surfaceHigh text-foreground hover:bg-surfaceHigher"
   );
+}
+
+function formatLeaderboardProfit(value: string): string {
+  const amount = BigInt(value);
+  const sign = amount > 0n ? "+" : amount < 0n ? "-" : "";
+  const absoluteWhole = (amount < 0n ? amount * -1n : amount) / 100n;
+  const wholeText = new Intl.NumberFormat("ru-RU").format(Number(absoluteWhole)).replace(/\u00A0/g, " ");
+
+  return `${sign}${wholeText}`;
+}
+
+function formatChipsWithApprox(
+  chips: string,
+  currency: string,
+  chipsPerCurrencyUnit: string | null
+): string {
+  if (chipsPerCurrencyUnit && /^\d+$/.test(chipsPerCurrencyUnit) && BigInt(chipsPerCurrencyUnit) > 0n) {
+    return formatChipsWithCurrencyApprox(chips, currency, chipsPerCurrencyUnit);
+  }
+
+  return `${formatChips(chips)} фишек`;
+}
+
+function formatCurrencyFromChips(
+  chips: string,
+  currency: string,
+  chipsPerCurrencyUnit: string | null
+): string {
+  if (chipsPerCurrencyUnit && /^\d+$/.test(chipsPerCurrencyUnit) && BigInt(chipsPerCurrencyUnit) > 0n) {
+    return formatMinorMoney(chipsToMoneyMinor(chips, chipsPerCurrencyUnit), currency);
+  }
+
+  return formatChips(chips);
+}
+
+function formatChipsCount(chips: string): string {
+  return `${formatChips(chips)} фишек`;
+}
+
+function formatSignedCurrency(value: string, currency: string): string {
+  const amount = BigInt(value);
+  const formatted = formatMinorMoney(value, currency);
+
+  return amount > 0n ? `+${formatted}` : formatted;
+}
+
+function formatTrendAxisCurrency(value: number, currency: string): string {
+  return formatMinorMoney(String(Math.round(value * 100)), currency);
+}
+
+function formatNullableStylePercent(value: number | null, fallback: string): string {
+  return value === null ? fallback : formatPercentFromBps(value);
+}
+
+function formatAggressionFactor(value: number): string {
+  if (value >= 1000) {
+    return "10+";
+  }
+
+  return new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  }).format(value / 100);
+}
+
+function formatBbPer100(value: number): string {
+  const sign = value > 0 ? "+" : "";
+  const formatted = new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  }).format(value / 100);
+
+  return `${sign}${formatted}`;
+}
+
+function formatSignedCurrencyFromChips(
+  chips: string,
+  currency: string,
+  chipsPerCurrencyUnit: string | null
+): string {
+  if (chipsPerCurrencyUnit && /^\d+$/.test(chipsPerCurrencyUnit) && BigInt(chipsPerCurrencyUnit) > 0n) {
+    return formatSignedCurrency(chipsToMoneyMinor(chips, chipsPerCurrencyUnit), currency);
+  }
+
+  return formatSignedChipsCount(chips);
+}
+
+function formatSignedChipsCount(chips: string): string {
+  const amount = BigInt(chips);
+  const sign = amount > 0n ? "+" : amount < 0n ? "-" : "";
+  const absolute = amount < 0n ? amount * -1n : amount;
+
+  return `${sign}${formatChips(absolute.toString())} фишек`;
+}
+
+function buildCumulativeProfitSeries(
+  recentGames: GetPlayerProfileResponseDto["recentGames"]
+): Array<{
+  closedAt: string;
+  valueMinor: string;
+}> {
+  const orderedGames = [...recentGames].reverse();
+  let runningProfit = 0n;
+
+  return orderedGames.map((game) => {
+    const nextValue = (game as GetPlayerProfileResponseDto["recentGames"][number] & {
+      cumulativeProfitMinor?: string;
+    }).cumulativeProfitMinor;
+
+    if (typeof nextValue === "string") {
+      runningProfit = BigInt(nextValue);
+    } else {
+      runningProfit += BigInt(game.myNetResultMinor);
+    }
+
+    return {
+      closedAt: game.closedAt,
+      valueMinor: runningProfit.toString()
+    };
+  });
+}
+
+function buildVirtualCumulativeProfitSeries(
+  recentResults: GetVirtualPlayerProfileResponseDto["recentResults"]
+): Array<{
+  finishedAt: string | null;
+  valueMinor: string;
+}> {
+  const orderedResults = [...recentResults].reverse();
+  let runningProfit = 0n;
+
+  return orderedResults.map((result) => {
+    if (result.cumulativeNetEstimatedMinor) {
+      runningProfit = BigInt(result.cumulativeNetEstimatedMinor);
+    } else {
+      runningProfit += BigInt(result.netEstimatedMinor);
+    }
+
+    return {
+      finishedAt: result.finishedAt,
+      valueMinor: runningProfit.toString()
+    };
+  });
+}
+
+function buildProfileTrendChartSeries(
+  series: Array<{
+    closedAt: string;
+    valueMinor: string;
+  }>
+): Array<{
+  closedAt: string;
+  valueMinor: string;
+}> {
+  const firstPoint = series[0];
+
+  if (!firstPoint) {
+    return [];
+  }
+
+  return [{ closedAt: firstPoint.closedAt, valueMinor: "0" }, ...series];
+}
+
+function buildVirtualProfileTrendChartSeries(
+  series: Array<{
+    finishedAt: string | null;
+    valueMinor: string;
+  }>
+): Array<{
+  finishedAt: string | null;
+  valueMinor: string;
+}> {
+  const firstPoint = series[0];
+
+  if (!firstPoint) {
+    return [];
+  }
+
+  return [{ finishedAt: firstPoint.finishedAt, valueMinor: "0" }, ...series];
+}
+
+function getLatestCumulativeProfitMinor(recentGames: GetPlayerProfileResponseDto["recentGames"]): string {
+  const series = buildCumulativeProfitSeries(recentGames);
+
+  return series[series.length - 1]?.valueMinor ?? "0";
+}
+
+function getLatestVirtualCumulativeNetEstimatedMinor(
+  recentResults: GetVirtualPlayerProfileResponseDto["recentResults"]
+): string {
+  const series = buildVirtualCumulativeProfitSeries(recentResults);
+
+  return series[series.length - 1]?.valueMinor ?? "0";
+}
+
+function getVirtualRecentMoneyStats(
+  recentResults: GetVirtualPlayerProfileResponseDto["recentResults"]
+): {
+  bestMinor: string;
+  worstMinor: string;
+  averageMinor: string;
+} {
+  if (recentResults.length === 0) {
+    return {
+      bestMinor: "0",
+      worstMinor: "0",
+      averageMinor: "0"
+    };
+  }
+
+  const values = recentResults.map((result) => BigInt(result.netEstimatedMinor));
+  const bestMinor = values.reduce((best, value) => (value > best ? value : best), values[0]!);
+  const worstMinor = values.reduce((worst, value) => (value < worst ? value : worst), values[0]!);
+  const totalMinor = values.reduce((sum, value) => sum + value, 0n);
+
+  return {
+    bestMinor: bestMinor.toString(),
+    worstMinor: worstMinor.toString(),
+    averageMinor: (totalMinor / BigInt(values.length)).toString()
+  };
 }
 
 function MaterialIcon({
@@ -2064,34 +3810,52 @@ function MaterialIcon({
   );
 }
 
-function getGreeting(): string {
-  const hour = new Date().getHours();
-
-  if (hour < 6) {
-    return "Доброй ночи";
-  }
-
-  if (hour < 12) {
-    return "Доброе утро";
-  }
-
-  if (hour < 18) {
-    return "Добрый день";
-  }
-
-  return "Добрый вечер";
-}
-
 function getChromeSubtitle(pathname: string): string {
+  if (pathname.endsWith("/history") || pathname.includes("/hands/")) {
+    return "История раздач";
+  }
+
+  if (pathname === getVirtualLobbyRoute() || pathname.startsWith("/poker/tables/")) {
+    return "Онлайн-покер";
+  }
+
+  if (pathname === getCreateVirtualTableRoute()) {
+    return "Новый стол";
+  }
+
+  if (pathname === getJoinVirtualTableRoute() || pathname.startsWith("/poker/join/")) {
+    return "Войти по коду";
+  }
+
+  if (pathname === getVirtualLeaderboardRoute()) {
+    return "Онлайн-рейтинг";
+  }
+
+  if (pathname === getVirtualStatsRoute()) {
+    return "Статистика";
+  }
+
+  if (pathname === getGamesRoute()) {
+    return "Оффлайн";
+  }
+
+  if (pathname === getClubRoute()) {
+    return "Клуб";
+  }
+
+  if (pathname === getJoinRoute()) {
+    return "Присоединиться";
+  }
+
   if (pathname === getLeaderboardRoute()) {
-    return "Рейтинг игроков";
+    return "Лидерборд";
   }
 
   if (pathname === getCreateRoomRoute()) {
     return "Новый стол";
   }
 
-  if (pathname.startsWith("/join/")) {
+  if (isJoinRoutePath(pathname)) {
     return "Приглашение в игру";
   }
 
@@ -2106,16 +3870,36 @@ function getChromeSubtitle(pathname: string): string {
   return "Poker tracker";
 }
 
-function isGamesRoute(pathname: string): boolean {
-  return (
-    pathname === getCreateRoomRoute() ||
-    pathname.startsWith("/join/") ||
-    pathname.startsWith("/rooms/")
-  );
+function isGamesBaseRoute(pathname: string): boolean {
+  return pathname === getGamesRoute() || pathname === getCreateRoomRoute() || isOfflineJoinRoutePath(pathname) || pathname.startsWith("/rooms/");
 }
 
-function getGamesRoute(pathname: string): string {
-  return isGamesRoute(pathname) ? pathname : getCreateRoomRoute();
+function isJoinRoutePath(pathname: string): boolean {
+  return isOfflineJoinRoutePath(pathname) || pathname === getJoinVirtualTableRoute() || pathname.startsWith("/poker/join/");
+}
+
+function isOfflineJoinRoutePath(pathname: string): boolean {
+  return pathname === getJoinRoute() || pathname.startsWith("/join/");
+}
+
+function isVirtualPokerRoute(pathname: string): boolean {
+  return pathname === getVirtualLobbyRoute() || pathname.startsWith("/poker/");
+}
+
+function isVirtualTableFullscreenRoute(pathname: string): boolean {
+  return /^\/poker\/tables\/[^/]+$/.test(pathname);
+}
+
+function parseLeaveFinalAmountPayload(input: string): SubmitFinalChipsRequestDto | null {
+  const normalized = input.trim().replace(/\s+/g, "");
+
+  if (!/^\d+$/.test(normalized)) {
+    return null;
+  }
+
+  return {
+    finalAmountChips: normalized
+  };
 }
 
 function isOwnProfilePath(pathname: string, currentUserId: string | null): boolean {
@@ -2144,23 +3928,6 @@ function getRebuyPermissionLabel(permission: CreateRoomFormValues["rebuyPermissi
   }
 }
 
-function getScopeDescription(scope: (typeof DEFAULT_LEADERBOARD_QUERY)["scope"]): string {
-  return scope === "played-with-me"
-    ? "Игроки, с которыми у вас уже был хотя бы один общий завершённый стол."
-    : "Общий рейтинг по завершённым играм внутри Poker Table.";
-}
-
-function getCurrencySymbol(currency: string): string {
-  switch (currency.toUpperCase()) {
-    case "USD":
-      return "$";
-    case "EUR":
-      return "€";
-    default:
-      return "₽";
-  }
-}
-
 function getInviteInitials(inviteCode: string): string {
   const compact = inviteCode.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
 
@@ -2184,6 +3951,25 @@ function getGamesLabel(count: number): string {
   }
 
   return "игр";
+}
+
+function getHandsLabel(count: number): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+
+  if (lastTwo >= 11 && lastTwo <= 14) {
+    return "рук";
+  }
+
+  if (last === 1) {
+    return "рука";
+  }
+
+  if (last >= 2 && last <= 4) {
+    return "руки";
+  }
+
+  return "рук";
 }
 
 function getPlayersLabel(count: number): string {
@@ -2234,6 +4020,54 @@ function formatDate(value: string): string {
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+function getProfileModeFromSearchParams(searchParams: URLSearchParams): ProfileMode {
+  return searchParams.get("mode") === "online" ? "online" : "offline";
+}
+
+function normalizeInviteCode(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+}
+
+function navigateBack(navigate: NavigateFunction, pathname: string): void {
+  if (canUseBrowserBack()) {
+    void navigate(-1);
+    return;
+  }
+
+  void navigate(getAppBackFallbackPath(pathname), { replace: true });
+}
+
+function getAppBackFallbackPath(pathname: string): string {
+  if (pathname.includes("/hands/")) {
+    const tableId = pathname.match(/^\/poker\/tables\/([^/]+)\/hands\/[^/]+$/)?.[1];
+
+    if (tableId) {
+      return getVirtualTableHistoryRoute(tableId);
+    }
+  }
+
+  if (pathname.endsWith("/history")) {
+    const tableId = pathname.match(/^\/poker\/tables\/([^/]+)\/history$/)?.[1];
+
+    if (tableId) {
+      return getVirtualTableRoute(tableId);
+    }
+  }
+
+  if (
+    pathname === getCreateVirtualTableRoute() ||
+    pathname === getJoinVirtualTableRoute() ||
+    pathname.startsWith("/poker/join/") ||
+    pathname === getVirtualLeaderboardRoute() ||
+    pathname === getVirtualStatsRoute() ||
+    pathname.startsWith("/poker/tables/")
+  ) {
+    return getVirtualLobbyRoute();
+  }
+
+  return getTelegramBackFallbackPath(pathname);
 }
 
 function createInitialHistoryState(): RebuyHistoryState {
@@ -2296,6 +4130,10 @@ async function refreshRoomState(
   });
 }
 
+function shouldPollRoomStatus(status: GetRoomResponseDto["room"]["status"] | undefined): boolean {
+  return status === "WAITING" || status === "RUNNING" || status === "SETTLEMENT";
+}
+
 function createIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -2322,7 +4160,12 @@ async function copyToClipboard(value: string): Promise<void> {
   await navigator.clipboard?.writeText(value);
 }
 
-function shareInvite(inviteUrl: string): void {
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}`;
+function shareInvite(roomTitle: string, inviteCode: string, inviteUrl: string): void {
+  const shareText = [
+    `Комната: ${roomTitle}`,
+    `Код: ${inviteCode.toUpperCase()}`,
+    "Открой бота или мини-приложение по ссылке и введи код."
+  ].join("\n");
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent(shareText)}`;
   window.open(shareUrl, "_blank", "noopener,noreferrer");
 }

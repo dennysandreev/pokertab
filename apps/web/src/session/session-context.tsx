@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { postTelegramAuth } from "@/lib/api";
 import { createInitialSessionState, type SessionState } from "@/lib/bootstrap";
-import { initializeTelegramWebApp, readTelegramLaunchData } from "@/lib/telegram";
+import { initializeTelegramWebApp, waitForTelegramLaunchData } from "@/lib/telegram";
 
 type SessionContextValue = {
   state: SessionState;
@@ -22,12 +22,33 @@ export function SessionProvider({
   children
 }: React.PropsWithChildren): React.JSX.Element {
   const hasBootstrappedRef = useRef(false);
-  const [state, setState] = useState<SessionState>(() =>
-    createInitialSessionState(readTelegramLaunchData())
-  );
+  const [state, setState] = useState<SessionState>(() => ({
+    status: "loading",
+    initData: null,
+    startParam: null,
+    inviteCode: null,
+    accessToken: null,
+    session: null,
+    errorMessage: null
+  }));
 
   useEffect(() => {
+    let isMounted = true;
+
     initializeTelegramWebApp();
+
+    void waitForTelegramLaunchData().then((launchData) => {
+      if (!isMounted) {
+        return;
+      }
+
+      initializeTelegramWebApp();
+      setState(createInitialSessionState(launchData));
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const bootstrap = useCallback(async () => {

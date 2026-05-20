@@ -3,8 +3,9 @@ import { AuthModule } from "./auth/auth.module";
 import { HealthModule } from "./health/health.module";
 import { PlayerStatsModule } from "./player-stats/player-stats.module";
 import { RoomsModule } from "./rooms/rooms.module";
+import { VirtualModule } from "./virtual/virtual.module";
 
 @Module({
-  imports: [AuthModule, HealthModule, RoomsModule, PlayerStatsModule]
+  imports: [AuthModule, HealthModule, RoomsModule, PlayerStatsModule, VirtualModule]
 })
 export class AppModule {}

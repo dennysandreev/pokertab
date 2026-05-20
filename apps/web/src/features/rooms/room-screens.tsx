@@ -15,7 +15,6 @@ import type {
   SettlementDraftPlayer,
   SettlementDraftSummary
 } from "./settlement-view";
-import { getSettlementDifferenceMessage } from "./settlement-view";
 
 export type RebuyHistoryState = {
   status: "idle" | "loading" | "ready" | "error";
@@ -39,20 +38,28 @@ type ActiveRoomPlayerProps = RoomScreenProps & {
   canSelfRebuy: boolean;
   selfRebuyHint: string;
   isCreatingSelfRebuy: boolean;
+  isLeavingRoom: boolean;
+  isReturningToRoom: boolean;
   isHistoryOpen: boolean;
   historyState: RebuyHistoryState;
   onSelfRebuy: () => void;
+  onLeaveRoom: () => void;
+  onReturnToRoom: () => void;
   onToggleHistory: () => void;
 };
 
 type ActiveRoomAdminProps = RoomScreenProps & {
   historyState: RebuyHistoryState;
   isHistoryOpen: boolean;
+  isLeavingRoom: boolean;
+  isReturningToRoom: boolean;
   addingRebuyForPlayerId: string | null;
   cancellingRebuyId: string | null;
   onAddRebuy: (player: RoomPlayerDto) => void;
   onCancelRebuy: (rebuy: RebuyHistoryItemDto) => void;
+  onLeaveRoom: () => void;
   onOpenSettlement: () => void;
+  onReturnToRoom: () => void;
   onToggleHistory: () => void;
 };
 
@@ -75,12 +82,8 @@ type SettlementInputScreenProps = RoomScreenProps & {
 
 const cardClassName =
   "glass-card rounded-[1.25rem] border border-white/10 bg-[#1a1a1a]/80 p-4 backdrop-blur-xl";
-const mutedCardClassName =
-  "rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4";
 const secondaryButtonClassName =
   "border border-white/10 bg-[#252525] text-white hover:bg-[#2d2d2d]";
-const iconButtonClassName =
-  "h-12 w-12 rounded-2xl border border-white/10 bg-[#252525] p-0 text-[#e5e2e1] hover:bg-[#2d2d2d]";
 const inputClassName =
   "mt-3 min-h-12 w-full rounded-xl border border-white/10 bg-[#252525] px-4 py-3 text-right text-lg font-semibold text-white outline-none transition placeholder:text-[#8e9192] focus:border-[#4edea3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4edea3]";
 const metricCardClassName =
@@ -97,6 +100,7 @@ export function WaitingRoom({
   onShareInvite
 }: WaitingRoomProps): JSX.Element {
   const { room, players } = data;
+  const inviteCode = room.inviteCode.toUpperCase();
 
   return (
     <div className="space-y-4">
@@ -118,49 +122,46 @@ export function WaitingRoom({
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <Metric label="Ребай" value={formatMinorMoney(room.rebuyAmountMinor, room.currency)} />
           <Metric
-            label="Стартовый стек"
-            value={
-              room.startingStack
-                ? `${room.startingStack.toLocaleString("ru-RU")} фишек`
-                : "Не указан"
-            }
+            label="Ребай"
+            value={formatChipsPrimary(getRoomRebuyChips(room))}
+            hint={formatChipsMoneyHint(getRoomRebuyChips(room), room.currency, getRoomChipsPerCurrencyUnit(room))}
           />
+          <Metric
+            label="Вход"
+            value={formatChipsPrimary(room.buyInChips)}
+          />
+          <Metric label="Курс" value={formatChipsRate(room.currency, getRoomChipsPerCurrencyUnit(room))} />
         </div>
       </section>
 
       <section className="grid grid-cols-2 gap-3">
-        <article className={`${cardClassName} aspect-square`}>
-          <div className="flex h-full flex-col justify-between">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
-                Игроков
-              </p>
-              <p className="mt-2 text-4xl font-bold leading-none text-white">{room.playersCount}</p>
-              <p className="mt-2 text-sm text-[#c4c7c8]">Состав лобби виден всем участникам.</p>
-            </div>
-            <Button className={iconButtonClassName} onClick={onCopyInvite}>
-              <span className="material-symbols-outlined text-[20px]">content_copy</span>
+        <InviteActionCard
+          action={
+            <Button
+              aria-label="Скопировать код"
+              className={cn(secondaryButtonClassName, "h-11 w-11 shrink-0 p-0")}
+              onClick={onCopyInvite}
+            >
+              <span className="material-symbols-outlined text-[18px]">content_copy</span>
             </Button>
-          </div>
-        </article>
+          }
+          icon="password"
+          label="Короткий код"
+          value={inviteCode}
+        />
 
-        <article className={`${cardClassName} aspect-square`}>
-          <div className="flex h-full flex-col justify-between">
-            <div>
-              <span className="material-symbols-outlined text-[#4edea3]">share</span>
-              <p className="mt-3 text-lg font-semibold text-white">Пригласить игроков</p>
-              <p className="mt-2 text-sm leading-6 text-[#c4c7c8]">
-                Ссылка ведет прямо в эту комнату.
-              </p>
-            </div>
-            <Button className={secondaryButtonClassName} onClick={onShareInvite}>
+        <InviteActionCard
+          action={
+            <Button className={cn(secondaryButtonClassName, "h-11 shrink-0 px-4")} onClick={onShareInvite}>
               <span className="material-symbols-outlined text-[18px]">send</span>
-              Поделиться
+              Пригласить
             </Button>
-          </div>
-        </article>
+          }
+          icon="share"
+          label="Пригласить в комнату"
+          value="Откройте мини-приложение и введите код"
+        />
       </section>
 
       <section className={cardClassName}>
@@ -180,13 +181,6 @@ export function WaitingRoom({
         </div>
       </section>
 
-      <section className={mutedCardClassName}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
-          Ссылка комнаты
-        </p>
-        <p className="mt-2 break-all text-sm leading-6 text-[#e5e2e1]">{room.inviteUrl}</p>
-      </section>
-
       {canStart ? (
         <div className="space-y-3">
           <Button className="w-full" disabled={isStarting} onClick={onStart}>
@@ -204,27 +198,54 @@ export function WaitingRoom({
   );
 }
 
+type InviteActionCardProps = {
+  icon: string;
+  label: string;
+  value: string;
+  action: JSX.Element;
+};
+
+function InviteActionCard({ icon, label, value, action }: InviteActionCardProps): JSX.Element {
+  return (
+    <article className={cardClassName}>
+      <div className="flex h-full min-h-[9rem] flex-col justify-between gap-4">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e9192]">
+            <span className="material-symbols-outlined text-[18px] text-[#4edea3]">{icon}</span>
+            <span className="min-w-0 truncate">{label}</span>
+          </div>
+          <p className="overflow-hidden text-ellipsis whitespace-nowrap text-[1.05rem] font-bold leading-tight text-white sm:text-[1.375rem]">
+            {value}
+          </p>
+        </div>
+        <div className="flex items-end">{action}</div>
+      </div>
+    </article>
+  );
+}
+
 export function ActiveRoomPlayer({
   data,
   canSelfRebuy,
   selfRebuyHint,
   isCreatingSelfRebuy,
+  isLeavingRoom,
+  isReturningToRoom,
   isHistoryOpen,
   historyState,
   onSelfRebuy,
+  onLeaveRoom,
+  onReturnToRoom,
   onToggleHistory
 }: ActiveRoomPlayerProps): JSX.Element {
   const { room, players } = data;
   const activePlayers = getActivePlayers(players);
   const myPlayer = getMyPlayer(players, room.myPlayerId);
+  const isMyPlayerLeft = room.myPlayerStatus === "LEFT";
 
   return (
     <div className="space-y-4">
-      <ActiveRoomHeader
-        room={room}
-        title="Игра идет"
-        description="Следите за составом стола и своими закупами в реальном времени."
-      />
+      <ActiveRoomHeader room={room} title="Игра идет" />
 
       <section className={`${cardClassName} relative overflow-hidden`}>
         <div className="absolute right-0 top-0 h-28 w-28 rounded-full bg-[#4edea3]/10 blur-3xl" />
@@ -235,26 +256,35 @@ export function ActiveRoomPlayer({
                 Ваши закупы
               </p>
               <p className="mt-2 text-[2.5rem] font-bold leading-none text-white">
-                {formatMinorMoney(myPlayer?.totalBuyinMinor ?? "0", room.currency)}
+                {formatChipsPrimary(getPlayerTotalBuyinChips(myPlayer))}
               </p>
               <p className="mt-2 text-sm text-[#c4c7c8]">
-                {myPlayer?.rebuyCount ?? 0} ребаев
+                {(myPlayer?.rebuyCount ?? 0).toLocaleString("ru-RU")} ребаев ·{" "}
+                {formatChipsMoneyHint(
+                  getPlayerTotalBuyinChips(myPlayer),
+                  room.currency,
+                  getRoomChipsPerCurrencyUnit(room)
+                ) ?? "эквивалент появится позже"}
               </p>
             </div>
             <RoleChip role={room.myRole} />
           </div>
 
-          <Button
-            className="w-full"
-            disabled={!canSelfRebuy || isCreatingSelfRebuy}
-            onClick={onSelfRebuy}
-          >
-            <span className="material-symbols-outlined text-[20px]">add_circle</span>
-            {isCreatingSelfRebuy
-              ? "Добавляем ребай"
-              : `Добавить ребай — ${formatMinorMoney(room.rebuyAmountMinor, room.currency)}`}
-          </Button>
-          <p className="text-sm leading-6 text-[#c4c7c8]">{selfRebuyHint}</p>
+          {isMyPlayerLeft ? null : (
+            <>
+              <Button
+                className="w-full"
+                disabled={!canSelfRebuy || isCreatingSelfRebuy}
+                onClick={onSelfRebuy}
+              >
+                <span className="material-symbols-outlined text-[20px]">add_circle</span>
+                {isCreatingSelfRebuy
+                  ? "Добавляем ребай"
+                  : `Добавить ребай — ${formatChipsPrimary(getRoomRebuyChips(room))}`}
+              </Button>
+              <p className="text-sm leading-6 text-[#c4c7c8]">{selfRebuyHint}</p>
+            </>
+          )}
         </div>
       </section>
 
@@ -278,6 +308,32 @@ export function ActiveRoomPlayer({
         isOpen={isHistoryOpen}
         onToggle={onToggleHistory}
       />
+
+      <section className={cardClassName}>
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">Ваш статус за столом</p>
+          {isMyPlayerLeft ? (
+            <>
+              <InfoText
+                text={`Вы вышли из игры. Сохранено: ${formatChipsPrimary(getPlayerFinalAmountChips(myPlayer))}.`}
+              />
+              <Button className="w-full" disabled={isReturningToRoom} onClick={onReturnToRoom}>
+                <span className="material-symbols-outlined text-[20px]">replay</span>
+                {isReturningToRoom ? "Возвращаем за стол" : "Вернуться за стол"}
+              </Button>
+            </>
+          ) : (
+            <Button
+              className={cn(secondaryButtonClassName, "w-full")}
+              disabled={isLeavingRoom}
+              onClick={onLeaveRoom}
+            >
+              <span className="material-symbols-outlined text-[20px]">logout</span>
+              {isLeavingRoom ? "Сохраняем выход" : "Выйти со стола"}
+            </Button>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -286,24 +342,25 @@ export function ActiveRoomAdmin({
   data,
   historyState,
   isHistoryOpen,
+  isLeavingRoom,
+  isReturningToRoom,
   addingRebuyForPlayerId,
   cancellingRebuyId,
   onAddRebuy,
   onCancelRebuy,
+  onLeaveRoom,
   onOpenSettlement,
+  onReturnToRoom,
   onToggleHistory
 }: ActiveRoomAdminProps): JSX.Element {
   const { room, players } = data;
   const activePlayers = getActivePlayers(players);
+  const myPlayer = getMyPlayer(players, room.myPlayerId);
+  const isMyPlayerLeft = room.myPlayerStatus === "LEFT";
 
   return (
     <div className="space-y-4">
-      <ActiveRoomHeader
-        room={room}
-        title="Режим администратора"
-        description="Добавляйте ребаи игрокам, сверяйте историю и готовьте финальный расчет."
-        badge="LIVE"
-      />
+      <ActiveRoomHeader room={room} title="Режим администратора" badge="LIVE" />
 
       <section className={cardClassName}>
         <div className="flex items-center justify-between gap-3">
@@ -326,7 +383,7 @@ export function ActiveRoomAdmin({
                     {player.id === room.myPlayerId ? " (вы)" : ""}
                   </p>
                   <p className="mt-1 text-xs text-[#8e9192]">
-                    {player.rebuyCount} ребаев · {formatMinorMoney(player.totalBuyinMinor, room.currency)}
+                    {player.rebuyCount} ребаев · {formatChipsPrimary(getPlayerTotalBuyinChips(player))}
                   </p>
                 </div>
                 <Button
@@ -354,11 +411,33 @@ export function ActiveRoomAdmin({
       />
 
       <section className={cardClassName}>
-        <div className="grid grid-cols-2 gap-3">
-          <Button className={secondaryButtonClassName} onClick={onToggleHistory}>
-            <span className="material-symbols-outlined text-[18px]">history</span>
-            {isHistoryOpen ? "Скрыть историю" : "Открыть историю"}
-          </Button>
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">Ваш статус за столом</p>
+          {isMyPlayerLeft ? (
+            <>
+              <InfoText
+                text={`Вы вышли из игры. Сохранено: ${formatChipsPrimary(getPlayerFinalAmountChips(myPlayer))}.`}
+              />
+              <Button className="w-full" disabled={isReturningToRoom} onClick={onReturnToRoom}>
+                <span className="material-symbols-outlined text-[20px]">replay</span>
+                {isReturningToRoom ? "Возвращаем за стол" : "Вернуться за стол"}
+              </Button>
+            </>
+          ) : (
+            <Button
+              className={cn(secondaryButtonClassName, "w-full")}
+              disabled={isLeavingRoom}
+              onClick={onLeaveRoom}
+            >
+              <span className="material-symbols-outlined text-[20px]">logout</span>
+              {isLeavingRoom ? "Сохраняем выход" : "Выйти со стола"}
+            </Button>
+          )}
+        </div>
+      </section>
+
+      <section className={cardClassName}>
+        <div>
           <Button className="w-full" onClick={onOpenSettlement}>
             <span className="material-symbols-outlined text-[18px]">calculate</span>
             К расчету
@@ -387,7 +466,7 @@ export function SettlementInputScreen({
   onCloseSettlement
 }: SettlementInputScreenProps): JSX.Element {
   const { room } = data;
-  const differenceMessage = getSettlementDifferenceMessage(summary.differenceMinor, room.currency);
+  const differenceMessage = getChipsDifferenceMessage(getSummaryDifferenceChips(summary));
   const previewResults = isPreviewCurrent ? preview?.players ?? [] : [];
   const previewTransfers = isPreviewCurrent ? preview?.transfers ?? [] : [];
   const progressPercent = Math.round((getSettlementProgress(draftPlayers) / Math.max(draftPlayers.length, 1)) * 100);
@@ -402,7 +481,7 @@ export function SettlementInputScreen({
             </p>
             <h2 className="mt-3 text-2xl font-semibold text-white">{room.title}</h2>
             <p className="mt-2 text-sm leading-6 text-[#c4c7c8]">
-              Введите финальную сумму каждого активного игрока. Это только итоговая инструкция после игры.
+              Введите, сколько фишек осталось у каждого игрока за столом. Денежный эквивалент рядом только для ориентира.
             </p>
           </div>
           <Button className={secondaryButtonClassName} onClick={onBack}>
@@ -414,15 +493,30 @@ export function SettlementInputScreen({
         <div className="mt-5 grid grid-cols-3 gap-2">
           <Metric
             label="Всего закупов"
-            value={formatMinorMoney(summary.totalBuyinsMinor, room.currency)}
+            value={formatChipsPrimary(getSummaryTotalBuyinsChips(summary))}
+            hint={formatChipsMoneyHint(
+              getSummaryTotalBuyinsChips(summary),
+              room.currency,
+              getRoomChipsPerCurrencyUnit(room)
+            )}
           />
           <Metric
             label="Введено"
-            value={formatMinorMoney(summary.totalFinalAmountMinor, room.currency)}
+            value={formatChipsPrimary(getSummaryTotalFinalAmountChips(summary))}
+            hint={formatChipsMoneyHint(
+              getSummaryTotalFinalAmountChips(summary),
+              room.currency,
+              getRoomChipsPerCurrencyUnit(room)
+            )}
           />
           <Metric
             label="Разница"
-            value={formatMinorMoney(summary.differenceMinor, room.currency)}
+            value={formatChipsPrimary(getSummaryDifferenceChips(summary))}
+            hint={formatChipsMoneyHint(
+              getSummaryDifferenceChips(summary),
+              room.currency,
+              getRoomChipsPerCurrencyUnit(room)
+            )}
             tone={!summary.isBalanced ? "error" : "default"}
           />
         </div>
@@ -449,7 +543,7 @@ export function SettlementInputScreen({
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-lg font-semibold text-white">Финальные суммы</p>
-            <p className="mt-1 text-sm text-[#c4c7c8]">Введите, сколько осталось у каждого игрока.</p>
+            <p className="mt-1 text-sm text-[#c4c7c8]">Введите, сколько фишек осталось у каждого игрока.</p>
           </div>
           <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#4edea3]">
             {progressPercent}%
@@ -470,6 +564,11 @@ export function SettlementInputScreen({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-semibold text-white">{player.displayName}</p>
+                    {player.status === "LEFT" ? (
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-[#c4c7c8]">
+                        Вышел
+                      </span>
+                    ) : null}
                     {player.roomPlayerId === room.myPlayerId ? (
                       <span className="rounded-full border border-[#4edea3]/20 bg-[#4edea3]/10 px-2 py-0.5 text-[11px] text-[#4edea3]">
                         Вы
@@ -477,19 +576,23 @@ export function SettlementInputScreen({
                     ) : null}
                   </div>
                   <p className="mt-1 text-xs text-[#8e9192]">
-                    Закупы: {formatMinorMoney(player.totalBuyinMinor, room.currency)}
+                    Закупы: {formatChipsPrimary(getPlayerTotalBuyinChips(player))}
                   </p>
-                  <p className={cn("mt-1 text-xs font-semibold", getNetResultClass(player.netResultMinor))}>
-                    {player.netResultMinor === null
+                  <p className={cn("mt-1 text-xs font-semibold", getNetResultClass(player.netResultChips))}>
+                    {player.netResultChips === null
                       ? "Результат появится после ввода"
-                      : formatMinorMoney(player.netResultMinor, room.currency)}
+                      : formatChipsWithMoneySecondary(
+                          player.netResultChips,
+                          room.currency,
+                          getRoomChipsPerCurrencyUnit(room)
+                        )}
                   </p>
                 </div>
               </div>
 
               <label className="mt-3 block">
                 <span className="text-xs font-medium uppercase tracking-[0.18em] text-[#8e9192]">
-                  Финальная сумма
+                  Финальные фишки
                 </span>
                 <input
                   className={inputClassName}
@@ -527,9 +630,6 @@ export function SettlementInputScreen({
             <span className="material-symbols-outlined text-[18px]">calculate</span>
             {isPreviewLoading ? "Проверяем расчет" : "Проверить расчет"}
           </Button>
-          <Button className={secondaryButtonClassName} onClick={onBack}>
-            Вернуться к столу
-          </Button>
           <Button className="w-full" disabled={!canClose} onClick={onCloseSettlement}>
             <span className="material-symbols-outlined text-[18px]">done_all</span>
             {isClosing ? "Закрываем игру" : "Закрыть игру"}
@@ -554,9 +654,10 @@ export function SettlementInputScreen({
         />
       ) : null}
 
-      {isPreviewCurrent && preview?.differenceMinor === "0" ? (
+      {isPreviewCurrent && preview?.differenceChips === "0" ? (
         <TransferInstructionsSection
           currency={room.currency}
+          chipsPerCurrencyUnit={getRoomChipsPerCurrencyUnit(room)}
           description="Это ручная подсказка после игры. Переводы в приложении не выполняются."
           transfers={previewTransfers}
         />
@@ -569,9 +670,6 @@ export function ClosedRoomResults({ data }: RoomScreenProps): JSX.Element {
   const { room, players, settlement } = data;
   const fallbackPlayers = buildFallbackResults(players);
   const resultPlayers = settlement?.players ?? fallbackPlayers;
-  const totalBuyinsMinor = settlement?.totalBuyinsMinor ?? room.totalPotMinor;
-  const totalFinalAmountMinor = settlement?.totalFinalAmountMinor ?? sumFinalAmounts(fallbackPlayers);
-  const myNetResult = getMyNetResult(resultPlayers, room.myPlayerId);
   const myTransfer = settlement
     ? getTransferForPlayer(settlement.transfers, room.myPlayerId)
     : null;
@@ -585,14 +683,27 @@ export function ClosedRoomResults({ data }: RoomScreenProps): JSX.Element {
         <h2 className="mt-3 text-[2rem] font-bold leading-none text-white">Итоги сохранены</h2>
         <p className="mt-2 text-sm leading-6 text-[#c4c7c8]">
           {room.title} · {resultPlayers.length} игроков · Общий стол{" "}
-          {formatMinorMoney(totalBuyinsMinor, room.currency)}
+          {formatChipsPrimary(getSettlementTotalBuyinsChips(settlement, room))}
         </p>
 
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <Metric label="Ваш итог" value={formatMinorMoney(myNetResult, room.currency)} />
           <Metric
-            label="Финальные суммы"
-            value={formatMinorMoney(totalFinalAmountMinor, room.currency)}
+            label="Ваш итог"
+            value={formatChipsPrimary(getMyNetResultChips(resultPlayers, room.myPlayerId, room))}
+            hint={formatChipsMoneyHint(
+              getMyNetResultChips(resultPlayers, room.myPlayerId, room),
+              room.currency,
+              getRoomChipsPerCurrencyUnit(room)
+            )}
+          />
+          <Metric
+            label="Фишек на финише"
+            value={formatChipsPrimary(getSettlementTotalFinalAmountChips(settlement, room, resultPlayers))}
+            hint={formatChipsMoneyHint(
+              getSettlementTotalFinalAmountChips(settlement, room, resultPlayers),
+              room.currency,
+              getRoomChipsPerCurrencyUnit(room)
+            )}
           />
         </div>
       </section>
@@ -609,8 +720,8 @@ export function ClosedRoomResults({ data }: RoomScreenProps): JSX.Element {
               <p className="text-sm font-semibold text-white">Что делать после игры</p>
               <p className="mt-1 text-sm text-[#c4c7c8]">
                 {myTransfer.direction === "outgoing"
-                  ? `Вам нужно передать ${formatMinorMoney(myTransfer.amountMinor, room.currency)} игроку ${myTransfer.counterpartyName}.`
-                  : `Игрок ${myTransfer.counterpartyName} передает вам ${formatMinorMoney(myTransfer.amountMinor, room.currency)}.`}
+                  ? `Вам нужно передать ${formatChipsWithMoneySecondary(getTransferAmountChips(myTransfer), room.currency, getRoomChipsPerCurrencyUnit(room))} игроку ${myTransfer.counterpartyName}.`
+                  : `Игрок ${myTransfer.counterpartyName} передает вам ${formatChipsWithMoneySecondary(getTransferAmountChips(myTransfer), room.currency, getRoomChipsPerCurrencyUnit(room))}.`}
               </p>
             </div>
           </div>
@@ -632,6 +743,7 @@ export function ClosedRoomResults({ data }: RoomScreenProps): JSX.Element {
       {settlement ? (
         <TransferInstructionsSection
           currency={room.currency}
+          chipsPerCurrencyUnit={getRoomChipsPerCurrencyUnit(room)}
           description="Здесь видно, кому и сколько передать вручную после игры."
           transfers={settlement.transfers}
         />
@@ -643,12 +755,10 @@ export function ClosedRoomResults({ data }: RoomScreenProps): JSX.Element {
 function ActiveRoomHeader({
   room,
   title,
-  description,
   badge
 }: {
   room: GetRoomResponseDto["room"];
   title: string;
-  description: string;
   badge?: string;
 }): JSX.Element {
   return (
@@ -668,7 +778,6 @@ function ActiveRoomHeader({
                 </>
               ) : null}
             </div>
-            <p className="mt-3 text-sm leading-6 text-[#c4c7c8]">{description}</p>
           </div>
           <div className="flex flex-col items-end gap-2">
             {badge ? (
@@ -680,9 +789,18 @@ function ActiveRoomHeader({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-3 gap-2 rounded-xl border border-white/5 bg-white/[0.03] p-3">
-          <CompactMetric label="Ребай" value={formatMinorMoney(room.rebuyAmountMinor, room.currency)} />
-          <CompactMetric label="Общий стол" value={formatMinorMoney(room.totalPotMinor, room.currency)} />
+        <div className="mt-5 grid grid-cols-2 gap-2 rounded-xl border border-white/5 bg-white/[0.03] p-3 sm:grid-cols-4">
+          <CompactMetric
+            label="Ребай"
+            value={formatChipsPrimary(getRoomRebuyChips(room))}
+            hint={formatChipsMoneyHint(getRoomRebuyChips(room), room.currency, getRoomChipsPerCurrencyUnit(room))}
+          />
+          <CompactMetric
+            label="Общий стол"
+            value={formatChipsPrimary(getRoomTotalPotChips(room))}
+            hint={formatChipsMoneyHint(getRoomTotalPotChips(room), room.currency, getRoomChipsPerCurrencyUnit(room))}
+          />
+          <CompactMetric label="Курс" value={formatChipsRate(room.currency, getRoomChipsPerCurrencyUnit(room))} />
           <CompactMetric label="Игроков" value={String(room.playersCount)} />
         </div>
       </div>
@@ -707,15 +825,8 @@ function HistorySection({
   onCancelRebuy?: (rebuy: RebuyHistoryItemDto) => void;
   onToggle: () => void;
 }): JSX.Element {
+  void currency;
   const activeHistoryItems = historyState.items.filter((item) => item.status === "ACTIVE");
-  const averageAmountMinor =
-    activeHistoryItems.length > 0
-      ? (
-          activeHistoryItems.reduce((total, item) => total + BigInt(item.amountMinor), 0n) /
-          BigInt(activeHistoryItems.length)
-        ).toString()
-      : "0";
-
   return (
     <section className={cardClassName}>
       <div className="flex items-start justify-between gap-3">
@@ -723,7 +834,10 @@ function HistorySection({
           <h3 className="text-lg font-semibold text-white">История ребаев</h3>
           <p className="mt-1 text-sm text-[#c4c7c8]">Здесь остаются действующие и отмененные записи.</p>
         </div>
-        <Button className={secondaryButtonClassName} onClick={onToggle}>
+        <Button
+          className="border border-white/10 bg-transparent text-[#c4c7c8] shadow-none hover:bg-white/[0.04] hover:text-white"
+          onClick={onToggle}
+        >
           <span className="material-symbols-outlined text-[18px]">history</span>
           {isOpen ? "Скрыть" : "Открыть"}
         </Button>
@@ -734,7 +848,10 @@ function HistorySection({
           {historyState.status === "ready" && historyState.items.length > 0 ? (
             <div className="mt-4 grid grid-cols-2 gap-3">
               <Metric label="Всего ребаев" value={String(activeHistoryItems.length)} />
-              <Metric label="Средний чек" value={formatMinorMoney(averageAmountMinor, currency)} />
+              <Metric
+                label="Средний ребай"
+                value={formatChipsPrimary(getAverageRebuyChips(activeHistoryItems))}
+              />
             </div>
           ) : null}
 
@@ -793,7 +910,7 @@ function HistorySection({
                       rebuy.status === "ACTIVE" ? "text-[#4edea3]" : "text-[#c4c7c8] line-through"
                     )}
                   >
-                    {formatMinorMoney(rebuy.amountMinor, currency)}
+                    {formatChipsPrimary(getRebuyAmountChips(rebuy))}
                   </p>
                 </div>
 
@@ -864,9 +981,11 @@ function PlayerTotalsRow({
       </div>
       <div className="text-right">
         <p className="text-sm font-semibold text-white">
-          {formatMinorMoney(player.totalBuyinMinor, currency)}
+          {formatChipsPrimary(getPlayerTotalBuyinChips(player))}
         </p>
-        <p className="mt-1 text-xs text-[#8e9192]">{getRoleText(player.role)}</p>
+        <p className="mt-1 text-xs text-[#8e9192]">
+          {formatChipsMoneyHint(getPlayerTotalBuyinChips(player), currency, null) ?? getRoleText(player.role)}
+        </p>
       </div>
     </article>
   );
@@ -923,10 +1042,12 @@ function StatusChip({
 
 function CompactMetric({
   label,
-  value
+  value,
+  hint
 }: {
   label: string;
   value: string;
+  hint?: string | undefined;
 }): JSX.Element {
   return (
     <div className="text-center">
@@ -934,6 +1055,7 @@ function CompactMetric({
         {label}
       </p>
       <p className="mt-1 text-sm font-semibold text-white">{value}</p>
+      {hint ? <p className="mt-1 text-[11px] text-[#8e9192]">{hint}</p> : null}
     </div>
   );
 }
@@ -941,10 +1063,12 @@ function CompactMetric({
 function Metric({
   label,
   value,
+  hint,
   tone = "default"
 }: {
   label: string;
   value: string;
+  hint?: string | undefined;
   tone?: "default" | "error";
 }): JSX.Element {
   return (
@@ -955,6 +1079,7 @@ function Metric({
       <p className={cn("mt-2 text-sm font-semibold", tone === "error" ? "text-rose-200" : "text-white")}>
         {value}
       </p>
+      {hint ? <p className="mt-1 text-xs text-[#8e9192]">{hint}</p> : null}
     </div>
   );
 }
@@ -972,8 +1097,9 @@ function ResultsSection({
   currency: string;
   currentPlayerId: string;
 }): JSX.Element {
+  void currency;
   const sortedPlayers = [...players].sort((left, right) => {
-    const difference = BigInt(right.netResultMinor) - BigInt(left.netResultMinor);
+    const difference = BigInt(right.netResultChips) - BigInt(left.netResultChips);
 
     if (difference !== 0n) {
       return difference > 0n ? 1 : -1;
@@ -1017,12 +1143,12 @@ function ResultsSection({
                   ) : null}
                 </div>
                 <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-[#8e9192]">
-                  {formatMinorMoney(player.totalBuyinMinor, currency)} →{" "}
-                  {formatMinorMoney(player.finalAmountMinor, currency)}
+                  {formatChipsPrimary(getResultTotalBuyinChips(player))} →{" "}
+                  {formatChipsPrimary(getResultFinalAmountChips(player))}
                 </p>
               </div>
-              <p className={cn("text-right text-lg font-semibold", getNetResultClass(player.netResultMinor))}>
-                {formatMinorMoney(player.netResultMinor, currency)}
+              <p className={cn("text-right text-lg font-semibold", getNetResultClass(player.netResultChips))}>
+                {formatChipsPrimary(getResultNetResultChips(player))}
               </p>
             </div>
           </article>
@@ -1035,10 +1161,12 @@ function ResultsSection({
 function TransferInstructionsSection({
   transfers,
   currency,
+  chipsPerCurrencyUnit,
   description
 }: {
   transfers: SettlementTransferDto[];
   currency: string;
+  chipsPerCurrencyUnit: number | null;
   description: string;
 }): JSX.Element {
   return (
@@ -1056,7 +1184,7 @@ function TransferInstructionsSection({
         <div className="mt-4 space-y-2">
           {transfers.map((transfer) => (
             <article
-              key={`${transfer.fromRoomPlayerId}-${transfer.toRoomPlayerId}-${transfer.amountMinor}`}
+              key={`${transfer.fromRoomPlayerId}-${transfer.toRoomPlayerId}-${transfer.amountChips}`}
               className={`${rowCardClassName} flex items-center justify-between gap-3`}
             >
               <div className="flex min-w-0 items-center gap-3">
@@ -1071,7 +1199,11 @@ function TransferInstructionsSection({
                 </div>
               </div>
               <p className="shrink-0 text-lg font-semibold text-white">
-                {formatMinorMoney(transfer.amountMinor, currency)}
+                {formatTransferAmountPrimary(
+                  getTransferAmountChips(transfer),
+                  currency,
+                  chipsPerCurrencyUnit
+                )}
               </p>
             </article>
           ))}
@@ -1191,26 +1323,16 @@ function getNetResultClass(value: string | null): string {
 
 function buildFallbackResults(players: RoomPlayerDto[]): SettlementPlayerResultDto[] {
   return players
-    .filter((player) => player.finalAmountMinor !== null)
+    .filter((player) => player.finalAmountChips !== null)
     .map((player) => ({
       roomPlayerId: player.id,
       displayName: player.displayName,
-      totalBuyinMinor: player.totalBuyinMinor,
-      finalAmountMinor: player.finalAmountMinor ?? "0",
-      netResultMinor:
-        player.netResultMinor ??
-        (BigInt(player.finalAmountMinor ?? "0") - BigInt(player.totalBuyinMinor)).toString()
+      totalBuyinChips: player.totalBuyinChips,
+      finalAmountChips: player.finalAmountChips ?? "0",
+      netResultChips:
+        player.netResultChips ??
+        (BigInt(player.finalAmountChips ?? "0") - BigInt(player.totalBuyinChips)).toString()
     }));
-}
-
-function sumFinalAmounts(players: SettlementPlayerResultDto[]): string {
-  return players
-    .reduce((total, player) => total + BigInt(player.finalAmountMinor), 0n)
-    .toString();
-}
-
-function getMyNetResult(players: SettlementPlayerResultDto[], myPlayerId: string): string {
-  return players.find((player) => player.roomPlayerId === myPlayerId)?.netResultMinor ?? "0";
 }
 
 function getTransferForPlayer(
@@ -1218,7 +1340,7 @@ function getTransferForPlayer(
   myPlayerId: string
 ):
   | {
-      amountMinor: string;
+      amountChips: string;
       counterpartyName: string;
       direction: "incoming" | "outgoing";
     }
@@ -1227,7 +1349,7 @@ function getTransferForPlayer(
 
   if (outgoing) {
     return {
-      amountMinor: outgoing.amountMinor,
+      amountChips: outgoing.amountChips,
       counterpartyName: outgoing.toName,
       direction: "outgoing"
     };
@@ -1237,11 +1359,244 @@ function getTransferForPlayer(
 
   if (incoming) {
     return {
-      amountMinor: incoming.amountMinor,
+      amountChips: incoming.amountChips,
       counterpartyName: incoming.fromName,
       direction: "incoming"
     };
   }
 
   return null;
+}
+
+type ChipsCarrier = {
+  buyInChips?: string;
+  rebuyChips?: string;
+  chipsPerCurrencyUnit?: number;
+  totalPotChips?: string;
+  myBuyinsChips?: string;
+  totalBuyinChips?: string;
+  finalAmountChips?: string;
+  netResultChips?: string;
+  amountChips?: string;
+  totalBuyinsChips?: string;
+  totalFinalAmountChips?: string;
+  differenceChips?: string;
+};
+
+function formatChipsPrimary(chips: string): string {
+  return `${formatChipsNumber(chips)} фишек`;
+}
+
+function getChipsDifferenceMessage(chips: string): string | null {
+  const difference = BigInt(chips);
+
+  if (difference === 0n) {
+    return null;
+  }
+
+  const absolute = difference < 0n ? difference * -1n : difference;
+  const amountText = formatChipsPrimary(absolute.toString());
+
+  if (difference > 0n) {
+    return `Фишек получилось больше на ${amountText}. Проверьте ввод.`;
+  }
+
+  return `Фишек пока меньше на ${amountText}. Проверьте ввод.`;
+}
+
+function formatChipsWithMoneySecondary(
+  chips: string,
+  currency: string,
+  chipsPerCurrencyUnit: number | null
+): string {
+  const moneyHint = formatChipsMoneyHint(chips, currency, chipsPerCurrencyUnit);
+
+  return moneyHint ? `${formatChipsPrimary(chips)} · ${moneyHint}` : formatChipsPrimary(chips);
+}
+
+export function formatTransferAmountPrimary(
+  chips: string,
+  currency: string,
+  chipsPerCurrencyUnit: number | null
+): string {
+  const moneyMinor = chipsToMoneyMinorLocal(chips, chipsPerCurrencyUnit);
+
+  if (moneyMinor === null) {
+    return `${formatChipsPrimary(chips)} · Курс не указан`;
+  }
+
+  return formatMinorMoney(moneyMinor, currency);
+}
+
+function formatChipsMoneyHint(
+  chips: string,
+  currency: string,
+  chipsPerCurrencyUnit: number | null
+): string | undefined {
+  const moneyMinor = chipsToMoneyMinorLocal(chips, chipsPerCurrencyUnit);
+
+  if (moneyMinor === null) {
+    return undefined;
+  }
+
+  return formatMinorMoney(moneyMinor, currency);
+}
+
+function formatChipsRate(currency: string, chipsPerCurrencyUnit: number | null): string {
+  if (!chipsPerCurrencyUnit || chipsPerCurrencyUnit <= 0) {
+    return "Не указан";
+  }
+
+  return `1 ${getCurrencySymbolLocal(currency)} = ${formatChipsNumber(String(chipsPerCurrencyUnit))} фишек`;
+}
+
+function formatChipsNumber(value: string): string {
+  const amount = BigInt(value);
+  const isNegative = amount < 0n;
+  const absolute = isNegative ? amount * -1n : amount;
+  const formatted = absolute.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0");
+
+  return isNegative ? `-${formatted}` : formatted;
+}
+
+function chipsToMoneyMinorLocal(chips: string, chipsPerCurrencyUnit: number | null): string | null {
+  if (!chipsPerCurrencyUnit || chipsPerCurrencyUnit <= 0) {
+    return null;
+  }
+
+  const rate = BigInt(chipsPerCurrencyUnit);
+  const amount = BigInt(chips);
+  const isNegative = amount < 0n;
+  const absolute = isNegative ? amount * -1n : amount;
+  const roundedMinor = (absolute * 100n + rate / 2n) / rate;
+  const normalized = roundedMinor.toString();
+
+  return isNegative ? `-${normalized}` : normalized;
+}
+
+function getCurrencySymbolLocal(currency: string): string {
+  switch (currency.trim().toUpperCase()) {
+    case "RUB":
+      return "₽";
+    case "USD":
+      return "$";
+    case "EUR":
+      return "€";
+    default:
+      return currency;
+  }
+}
+
+function getRoomChipsPerCurrencyUnit(room: GetRoomResponseDto["room"]): number | null {
+  const rate = (room as GetRoomResponseDto["room"] & ChipsCarrier).chipsPerCurrencyUnit;
+  if (typeof rate === "number" && Number.isFinite(rate) && rate > 0) {
+    return rate;
+  }
+
+  if (typeof room.chipsPerCurrencyUnit === "string" && /^\d+$/.test(room.chipsPerCurrencyUnit)) {
+    const parsed = Number.parseInt(room.chipsPerCurrencyUnit, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  return null;
+}
+
+function getRoomRebuyChips(room: GetRoomResponseDto["room"]): string {
+  return room.rebuyChips;
+}
+
+function getRoomTotalPotChips(room: GetRoomResponseDto["room"]): string {
+  return room.totalPotChips;
+}
+
+function getPlayerTotalBuyinChips(player: RoomPlayerDto | SettlementDraftPlayer | null | undefined): string {
+  if (!player) {
+    return "0";
+  }
+
+  return player.totalBuyinChips;
+}
+
+function getPlayerFinalAmountChips(player: RoomPlayerDto | null | undefined): string {
+  if (!player?.finalAmountChips) {
+    return "0";
+  }
+
+  return player.finalAmountChips;
+}
+
+function getResultTotalBuyinChips(player: SettlementPlayerResultDto): string {
+  return player.totalBuyinChips;
+}
+
+function getResultFinalAmountChips(player: SettlementPlayerResultDto): string {
+  return player.finalAmountChips;
+}
+
+function getResultNetResultChips(player: SettlementPlayerResultDto): string {
+  return player.netResultChips;
+}
+
+function getTransferAmountChips(transfer: SettlementTransferDto | { amountChips: string }): string {
+  return transfer.amountChips;
+}
+
+function getRebuyAmountChips(rebuy: RebuyHistoryItemDto): string {
+  return rebuy.amountChips;
+}
+
+function getAverageRebuyChips(items: RebuyHistoryItemDto[]): string {
+  const itemsWithChips = items as Array<RebuyHistoryItemDto & ChipsCarrier>;
+
+  if (itemsWithChips.length === 0) {
+    return "0";
+  }
+
+  const total = itemsWithChips.reduce(
+    (sum, item) => sum + BigInt(item.amountChips),
+    0n
+  );
+
+  return (total / BigInt(itemsWithChips.length)).toString();
+}
+
+function getSummaryTotalBuyinsChips(summary: SettlementDraftSummary): string {
+  return summary.totalBuyinsChips;
+}
+
+function getSummaryTotalFinalAmountChips(summary: SettlementDraftSummary): string {
+  return summary.totalFinalAmountChips;
+}
+
+function getSummaryDifferenceChips(summary: SettlementDraftSummary): string {
+  return summary.differenceChips;
+}
+
+function getSettlementTotalBuyinsChips(
+  settlement: GetRoomResponseDto["settlement"],
+  room: GetRoomResponseDto["room"]
+): string {
+  return settlement?.totalBuyinsChips ?? getRoomTotalPotChips(room);
+}
+
+function getSettlementTotalFinalAmountChips(
+  settlement: GetRoomResponseDto["settlement"],
+  room: GetRoomResponseDto["room"],
+  players: SettlementPlayerResultDto[]
+): string {
+  if (settlement?.totalFinalAmountChips) {
+    return settlement.totalFinalAmountChips;
+  }
+
+  return players.reduce((total, player) => total + BigInt(getResultFinalAmountChips(player)), 0n).toString();
+}
+
+function getMyNetResultChips(
+  players: SettlementPlayerResultDto[],
+  myPlayerId: string,
+  room: GetRoomResponseDto["room"]
+): string {
+  void room;
+  const player = players.find((item) => item.roomPlayerId === myPlayerId);
+  return player ? getResultNetResultChips(player) : "0";
 }

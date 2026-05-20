@@ -1,90 +1,90 @@
 export type SettlementPlayerInput = {
   roomPlayerId: string;
   displayName: string;
-  totalBuyinMinor: bigint;
-  finalAmountMinor: bigint;
+  totalBuyinChips: bigint;
+  finalAmountChips: bigint;
 };
 
 export type SettlementPlayerNetResult = SettlementPlayerInput & {
-  netResultMinor: bigint;
+  netResultChips: bigint;
 };
 
 export type SettlementBalanceValidationResult = {
-  totalBuyinsMinor: bigint;
-  totalFinalAmountMinor: bigint;
-  differenceMinor: bigint;
+  totalBuyinsChips: bigint;
+  totalFinalAmountChips: bigint;
+  differenceChips: bigint;
   isBalanced: boolean;
 };
 
 export type SettlementTransferCalculation = {
   fromRoomPlayerId: string;
   toRoomPlayerId: string;
-  amountMinor: bigint;
+  amountChips: bigint;
 };
 
 export function calculatePlayerNetResults(
   players: SettlementPlayerInput[]
 ): SettlementPlayerNetResult[] {
   return players.map((player) => {
-    assertNonNegativeMoney(player.totalBuyinMinor, "Сумма закупов не может быть отрицательной");
-    assertNonNegativeMoney(
-      player.finalAmountMinor,
+    assertNonNegativeChips(player.totalBuyinChips, "Сумма закупов не может быть отрицательной");
+    assertNonNegativeChips(
+      player.finalAmountChips,
       "Финальная сумма не может быть отрицательной"
     );
 
     return {
       ...player,
-      netResultMinor: player.finalAmountMinor - player.totalBuyinMinor
+      netResultChips: player.finalAmountChips - player.totalBuyinChips
     };
   });
 }
 
 export function validateSettlementBalance(
-  players: Pick<SettlementPlayerNetResult, "totalBuyinMinor" | "finalAmountMinor">[]
+  players: Pick<SettlementPlayerNetResult, "totalBuyinChips" | "finalAmountChips">[]
 ): SettlementBalanceValidationResult {
-  let totalBuyinsMinor = 0n;
-  let totalFinalAmountMinor = 0n;
+  let totalBuyinsChips = 0n;
+  let totalFinalAmountChips = 0n;
 
   for (const player of players) {
-    totalBuyinsMinor += player.totalBuyinMinor;
-    totalFinalAmountMinor += player.finalAmountMinor;
+    totalBuyinsChips += player.totalBuyinChips;
+    totalFinalAmountChips += player.finalAmountChips;
   }
 
-  const differenceMinor = totalFinalAmountMinor - totalBuyinsMinor;
+  const differenceChips = totalFinalAmountChips - totalBuyinsChips;
 
   return {
-    totalBuyinsMinor,
-    totalFinalAmountMinor,
-    differenceMinor,
-    isBalanced: differenceMinor === 0n
+    totalBuyinsChips,
+    totalFinalAmountChips,
+    differenceChips,
+    isBalanced: differenceChips === 0n
   };
 }
 
 export function calculateTransfers(
-  players: Pick<SettlementPlayerNetResult, "roomPlayerId" | "netResultMinor">[]
+  players: Pick<SettlementPlayerNetResult, "roomPlayerId" | "netResultChips">[]
 ): SettlementTransferCalculation[] {
-  const totalNetMinor = players.reduce(
-    (sum, player) => sum + player.netResultMinor,
+  const totalNetChips = players.reduce(
+    (sum, player) => sum + player.netResultChips,
     0n
   );
 
-  if (totalNetMinor !== 0n) {
+  if (totalNetChips !== 0n) {
     throw new RangeError("Settlement is not balanced");
   }
 
   const creditors = players
-    .filter((player) => player.netResultMinor > 0n)
+    .filter((player) => player.netResultChips > 0n)
     .map((player) => ({
       roomPlayerId: player.roomPlayerId,
-      remainingMinor: player.netResultMinor
+      remainingChips: player.netResultChips
     }))
     .sort(compareRemainingDesc);
 
   const debtors = players
-    .filter((player) => player.netResultMinor < 0n)
+    .filter((player) => player.netResultChips < 0n)
     .map((player) => ({
       roomPlayerId: player.roomPlayerId,
-      remainingMinor: player.netResultMinor * -1n
+      remainingChips: player.netResultChips * -1n
     }))
     .sort(compareRemainingDesc);
 
@@ -100,27 +100,27 @@ export function calculateTransfers(
       break;
     }
 
-    const amountMinor =
-      debtor.remainingMinor < creditor.remainingMinor
-        ? debtor.remainingMinor
-        : creditor.remainingMinor;
+    const amountChips =
+      debtor.remainingChips < creditor.remainingChips
+        ? debtor.remainingChips
+        : creditor.remainingChips;
 
-    if (amountMinor > 0n) {
+    if (amountChips > 0n) {
       transfers.push({
         fromRoomPlayerId: debtor.roomPlayerId,
         toRoomPlayerId: creditor.roomPlayerId,
-        amountMinor
+        amountChips
       });
     }
 
-    debtor.remainingMinor -= amountMinor;
-    creditor.remainingMinor -= amountMinor;
+    debtor.remainingChips -= amountChips;
+    creditor.remainingChips -= amountChips;
 
-    if (debtor.remainingMinor === 0n) {
+    if (debtor.remainingChips === 0n) {
       debtorIndex += 1;
     }
 
-    if (creditor.remainingMinor === 0n) {
+    if (creditor.remainingChips === 0n) {
       creditorIndex += 1;
     }
   }
@@ -128,19 +128,19 @@ export function calculateTransfers(
   return transfers;
 }
 
-function assertNonNegativeMoney(value: bigint, message: string): void {
+function assertNonNegativeChips(value: bigint, message: string): void {
   if (value < 0n) {
     throw new RangeError(message);
   }
 }
 
 function compareRemainingDesc(
-  left: { roomPlayerId: string; remainingMinor: bigint },
-  right: { roomPlayerId: string; remainingMinor: bigint }
+  left: { roomPlayerId: string; remainingChips: bigint },
+  right: { roomPlayerId: string; remainingChips: bigint }
 ): number {
-  if (left.remainingMinor === right.remainingMinor) {
+  if (left.remainingChips === right.remainingChips) {
     return left.roomPlayerId.localeCompare(right.roomPlayerId);
   }
 
-  return left.remainingMinor > right.remainingMinor ? -1 : 1;
+  return left.remainingChips > right.remainingChips ? -1 : 1;
 }

@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import {
+  type OnlinePlayerStats,
   RebuyEventStatus as PrismaRebuyEventStatus,
   RoomStatus as PrismaRoomStatus,
   type Prisma,
@@ -15,10 +16,12 @@ import type {
   LeaderboardItemDto,
   PlayerProfileStatsDto,
   RecentPlayerGameDto,
-  UserDto
+  UserDto,
+  VirtualOnlineStatsDto
 } from "@pokertable/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { ApiError } from "../shared/api-error";
+import { chipsToMinorAmount } from "../shared/chips";
 import {
   calculatePlayerStats,
   compareLeaderboardStats,
@@ -30,11 +33,19 @@ type ClosedGameParticipationRecord = RoomPlayer & {
   user: User;
   room: Pick<
     Room,
-    "id" | "title" | "currency" | "rebuyAmountMinor" | "closedAt" | "status"
+    | "id"
+    | "title"
+    | "currency"
+    | "buyInChips"
+    | "rebuyChips"
+    | "chipsPerCurrencyUnit"
+    | "rebuyAmountMinor"
+    | "closedAt"
+    | "status"
   > & {
     players: Array<Pick<RoomPlayer, "id">>;
   };
-  rebuyEvents: Array<Pick<RebuyEvent, "amountMinor">>;
+  rebuyEvents: Array<Pick<RebuyEvent, "amountChips" | "amountMinor">>;
 };
 
 type PlayerIdentity = {
@@ -148,8 +159,11 @@ export class PlayerStatsService {
 
     if (viewer.id !== targetUserId) {
       const hasSharedClosedRoom = await this.hasSharedClosedRoom(viewer.id, targetUserId);
+      const hasSharedVirtualTable = hasSharedClosedRoom
+        ? false
+        : await this.hasSharedVirtualTable(viewer.id, targetUserId);
 
-      if (!hasSharedClosedRoom) {
+      if (!hasSharedClosedRoom && !hasSharedVirtualTable) {
         throw new ApiError(
           PLAYER_STATS_ERROR_CODES.accessDenied,
           "Профиль доступен только тем, кто уже играл вместе",
@@ -161,6 +175,12 @@ export class PlayerStatsService {
     const rows = await this.getClosedGameRowsForUsers([targetUserId]);
     const selectedRows = this.selectRowsForPeriod(rows, "all-time");
     const stats = calculatePlayerStats(selectedRows);
+    const onlineStats = await this.prisma.onlinePlayerStats.findUnique({
+      where: {
+        userId: targetUserId
+      }
+    });
+    const recentGames = toRecentGameDtos(selectedRows.slice(0, 10));
 
     return {
       user: {
@@ -169,7 +189,8 @@ export class PlayerStatsService {
         username: targetUser.username ?? null
       },
       stats: stats ? toPlayerProfileStatsDto(stats) : createEmptyPlayerProfileStats(),
-      recentGames: selectedRows.slice(0, 10).map(toRecentGameDto)
+      onlineStats: toOnlineStatsDto(onlineStats, targetUser),
+      recentGames
     };
   }
 
@@ -257,12 +278,7 @@ export class PlayerStatsService {
         roomId: {
           in: roomIds
         },
-        finalAmountMinor: {
-          not: null
-        },
-        netResultMinor: {
-          not: null
-        }
+        AND: [buildRecordedSettlementResultWhere()]
       },
       select: {
         userId: true
@@ -290,12 +306,7 @@ export class PlayerStatsService {
         roomId: {
           in: roomIds
         },
-        finalAmountMinor: {
-          not: null
-        },
-        netResultMinor: {
-          not: null
-        }
+        AND: [buildRecordedSettlementResultWhere()]
       },
       select: {
         id: true
@@ -303,6 +314,40 @@ export class PlayerStatsService {
     });
 
     return Boolean(sharedMembership);
+  }
+
+  private async hasSharedVirtualTable(
+    viewerUserId: string,
+    targetUserId: string,
+    prisma: PrismaService | Prisma.TransactionClient = this.prisma
+  ): Promise<boolean> {
+    const viewerSeats = await prisma.virtualSeat.findMany({
+      where: {
+        userId: viewerUserId
+      },
+      select: {
+        tableId: true
+      },
+      distinct: ["tableId"]
+    });
+
+    if (viewerSeats.length === 0) {
+      return false;
+    }
+
+    const sharedSeat = await prisma.virtualSeat.findFirst({
+      where: {
+        userId: targetUserId,
+        tableId: {
+          in: viewerSeats.map((seat) => seat.tableId)
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+
+    return Boolean(sharedSeat);
   }
 
   private async getClosedRoomIdsForUser(
@@ -346,6 +391,7 @@ export class PlayerStatsService {
             status: PrismaRebuyEventStatus.ACTIVE
           },
           select: {
+            amountChips: true,
             amountMinor: true
           }
         },
@@ -354,18 +400,14 @@ export class PlayerStatsService {
             id: true,
             title: true,
             currency: true,
+            buyInChips: true,
+            rebuyChips: true,
+            chipsPerCurrencyUnit: true,
             rebuyAmountMinor: true,
             closedAt: true,
             status: true,
             players: {
-              where: {
-                finalAmountMinor: {
-                  not: null
-                },
-                netResultMinor: {
-                  not: null
-                }
-              },
+              where: buildRecordedSettlementResultWhere(),
               select: {
                 id: true
               }
@@ -380,9 +422,38 @@ export class PlayerStatsService {
         if (
           record.room.status !== PrismaRoomStatus.CLOSED ||
           record.room.closedAt === null ||
-          record.finalAmountMinor === null ||
-          record.netResultMinor === null
+          getRecordedMinorAmount(
+            record.finalAmountChips,
+            record.finalAmountMinor,
+            record.room.chipsPerCurrencyUnit
+          ) === null ||
+          getRecordedMinorAmount(
+            record.netResultChips,
+            record.netResultMinor,
+            record.room.chipsPerCurrencyUnit
+          ) === null
         ) {
+          return null;
+        }
+
+        const totalBuyinChips =
+          record.room.buyInChips +
+          record.rebuyEvents.reduce(
+            (sum, rebuy) => sum + getRebuyAmountChips(rebuy, record.room.chipsPerCurrencyUnit),
+            0n
+          );
+        const finalAmountMinor = getRecordedMinorAmount(
+          record.finalAmountChips,
+          record.finalAmountMinor,
+          record.room.chipsPerCurrencyUnit
+        );
+        const netResultMinor = getRecordedMinorAmount(
+          record.netResultChips,
+          record.netResultMinor,
+          record.room.chipsPerCurrencyUnit
+        );
+
+        if (finalAmountMinor === null || netResultMinor === null) {
           return null;
         }
 
@@ -394,13 +465,16 @@ export class PlayerStatsService {
           title: record.room.title,
           currency: record.room.currency,
           closedAt: record.room.closedAt,
-          rebuyAmountMinor: record.room.rebuyAmountMinor,
-          totalBuyinMinor: record.rebuyEvents.reduce(
-            (sum, rebuy) => sum + rebuy.amountMinor,
-            0n
+          rebuyAmountMinor: chipsToMinorAmount(
+            record.room.rebuyChips,
+            record.room.chipsPerCurrencyUnit
           ),
-          finalAmountMinor: record.finalAmountMinor,
-          netResultMinor: record.netResultMinor,
+          totalBuyinMinor: chipsToMinorAmount(
+            totalBuyinChips,
+            record.room.chipsPerCurrencyUnit
+          ),
+          finalAmountMinor,
+          netResultMinor,
           playersCount: record.room.players.length
         } satisfies ClosedGameStatRow;
       })
@@ -473,12 +547,7 @@ export class PlayerStatsService {
 
     return {
       ...(userIds ? { userId: { in: userIds } } : {}),
-      finalAmountMinor: {
-        not: null
-      },
-      netResultMinor: {
-        not: null
-      },
+      AND: [buildRecordedSettlementResultWhere()],
       room: {
         is: {
           status: PrismaRoomStatus.CLOSED,
@@ -487,6 +556,64 @@ export class PlayerStatsService {
       }
     };
   }
+}
+
+function buildRecordedSettlementResultWhere(): Prisma.RoomPlayerWhereInput {
+  return {
+    AND: [
+      {
+        OR: [
+          {
+            finalAmountChips: {
+              not: null
+            }
+          },
+          {
+            finalAmountMinor: {
+              not: null
+            }
+          }
+        ]
+      },
+      {
+        OR: [
+          {
+            netResultChips: {
+              not: null
+            }
+          },
+          {
+            netResultMinor: {
+              not: null
+            }
+          }
+        ]
+      }
+    ]
+  };
+}
+
+function getRecordedMinorAmount(
+  chips: bigint | null | undefined,
+  minor: bigint | null | undefined,
+  chipsPerCurrencyUnit: number
+): bigint | null {
+  if (chips != null) {
+    return chipsToMinorAmount(chips, chipsPerCurrencyUnit);
+  }
+
+  return minor ?? null;
+}
+
+function getRebuyAmountChips(
+  rebuy: Pick<RebuyEvent, "amountChips" | "amountMinor">,
+  chipsPerCurrencyUnit: number
+): bigint {
+  if (rebuy.amountChips != null) {
+    return rebuy.amountChips;
+  }
+
+  return (rebuy.amountMinor * BigInt(chipsPerCurrencyUnit)) / 100n;
 }
 
 function toPlayerProfileStatsDto(
@@ -521,6 +648,38 @@ function createEmptyPlayerProfileStats(): PlayerProfileStatsDto {
   };
 }
 
+function toOnlineStatsDto(
+  stats: Pick<
+    OnlinePlayerStats,
+    | "userId"
+    | "handsPlayed"
+    | "handsWon"
+    | "netChips"
+    | "netEstimatedMinor"
+    | "bigBlindsWon"
+    | "bbPer100Bps"
+    | "winRateBps"
+    | "avgChipsPerHand"
+    | "onlinePokerScore"
+  > | null,
+  user: Pick<User, "id" | "username" | "firstName">
+): VirtualOnlineStatsDto {
+  return {
+    userId: stats?.userId ?? user.id,
+    displayName: getUserDisplayName(user),
+    username: user.username ?? null,
+    handsPlayed: stats?.handsPlayed ?? 0,
+    handsWon: stats?.handsWon ?? 0,
+    netChips: stats?.netChips.toString() ?? "0",
+    netEstimatedMinor: stats?.netEstimatedMinor.toString() ?? "0",
+    bigBlindsWon: stats?.bigBlindsWon.toString() ?? "0",
+    bbPer100Bps: stats?.bbPer100Bps ?? 0,
+    winRateBps: stats?.winRateBps ?? 0,
+    avgChipsPerHand: stats?.avgChipsPerHand.toString() ?? "0",
+    onlinePokerScore: stats?.onlinePokerScore ?? 0
+  };
+}
+
 function toRecentGameDto(row: ClosedGameStatRow): RecentPlayerGameDto {
   return {
     roomId: row.roomId,
@@ -528,9 +687,25 @@ function toRecentGameDto(row: ClosedGameStatRow): RecentPlayerGameDto {
     status: "CLOSED",
     closedAt: row.closedAt.toISOString(),
     myNetResultMinor: row.netResultMinor.toString(),
+    cumulativeProfitMinor: row.netResultMinor.toString(),
     playersCount: row.playersCount,
     currency: row.currency
   };
+}
+
+function toRecentGameDtos(rows: ClosedGameStatRow[]): RecentPlayerGameDto[] {
+  let cumulativeProfitMinor = 0n;
+  const cumulativeByRoomId = new Map<string, bigint>();
+
+  for (const row of [...rows].reverse()) {
+    cumulativeProfitMinor += row.netResultMinor;
+    cumulativeByRoomId.set(row.roomId, cumulativeProfitMinor);
+  }
+
+  return rows.map((row) => ({
+    ...toRecentGameDto(row),
+    cumulativeProfitMinor: (cumulativeByRoomId.get(row.roomId) ?? row.netResultMinor).toString()
+  }));
 }
 
 function compareClosedGameRowsDesc(left: ClosedGameStatRow, right: ClosedGameStatRow): number {
@@ -543,7 +718,7 @@ function compareClosedGameRowsDesc(left: ClosedGameStatRow, right: ClosedGameSta
   return left.roomId.localeCompare(right.roomId);
 }
 
-function getUserDisplayName(user: User): string {
+function getUserDisplayName(user: Pick<User, "firstName" | "username">): string {
   return user.firstName ?? user.username ?? "Игрок";
 }
 

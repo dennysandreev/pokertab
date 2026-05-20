@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   canUseBrowserBack,
   getTelegramBackFallbackPath,
+  getVirtualInviteCodeFromStartParam,
   hideTelegramBackButton,
   initializeTelegramWebApp,
   offTelegramBackButtonClick,
   onTelegramBackButtonClick,
   readTelegramLaunchData,
-  showTelegramBackButton
+  showTelegramBackButton,
+  waitForTelegramLaunchData
 } from "./telegram";
 
 describe("readTelegramLaunchData", () => {
@@ -52,6 +54,31 @@ describe("readTelegramLaunchData", () => {
       startParam: null,
       inviteCode: null
     });
+  });
+
+  it("waits for available Telegram initData", async () => {
+    await expect(
+      waitForTelegramLaunchData({
+        Telegram: {
+          WebApp: {
+            initData: "auth_date=1&start_param=room_abc123"
+          }
+        }
+      })
+    ).resolves.toEqual({
+      initData: "auth_date=1&start_param=room_abc123",
+      startParam: "room_abc123",
+      inviteCode: "abc123"
+    });
+  });
+
+  it("extracts virtual invite code from supported prefixes", () => {
+    expect(getVirtualInviteCodeFromStartParam("virtual_table_ab12cd34")).toBe("AB12CD34");
+    expect(getVirtualInviteCodeFromStartParam("virtual_ab12cd34")).toBe("AB12CD34");
+    expect(getVirtualInviteCodeFromStartParam("virtual-table_zz99yy88")).toBe("ZZ99YY88");
+    expect(getVirtualInviteCodeFromStartParam("poker_q1w2e3r4")).toBe("Q1W2E3R4");
+    expect(getVirtualInviteCodeFromStartParam("room_abc123")).toBeNull();
+    expect(getVirtualInviteCodeFromStartParam("table_ab12cd34")).toBeNull();
   });
 });
 
