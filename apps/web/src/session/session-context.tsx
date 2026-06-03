@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { postTelegramAuth } from "@/lib/api";
 import { createInitialSessionState, type SessionState } from "@/lib/bootstrap";
+import { sendClientBootBeacon } from "@/lib/client-boot";
 import { initializeTelegramWebApp, waitForTelegramLaunchData } from "@/lib/telegram";
 
 type SessionContextValue = {
@@ -35,6 +36,7 @@ export function SessionProvider({
   useEffect(() => {
     let isMounted = true;
 
+    sendClientBootBeacon("session-provider-mounted");
     initializeTelegramWebApp();
 
     void waitForTelegramLaunchData().then((launchData) => {
@@ -43,6 +45,7 @@ export function SessionProvider({
       }
 
       initializeTelegramWebApp();
+      sendClientBootBeacon(launchData.initData ? "launch-data-ready" : "launch-data-missing");
       setState(createInitialSessionState(launchData));
     });
 
@@ -53,9 +56,11 @@ export function SessionProvider({
 
   const bootstrap = useCallback(async () => {
     if (!state.initData) {
+      sendClientBootBeacon("auth-skipped-no-init-data");
       return;
     }
 
+    sendClientBootBeacon("auth-start");
     setState((currentState) => ({
       ...currentState,
       status: "loading",
@@ -65,6 +70,7 @@ export function SessionProvider({
     try {
       const session = await postTelegramAuth(state.initData);
 
+      sendClientBootBeacon("auth-success");
       setState((currentState) => ({
         ...currentState,
         status: "authenticated",
@@ -73,6 +79,7 @@ export function SessionProvider({
         errorMessage: null
       }));
     } catch (error) {
+      sendClientBootBeacon("auth-error");
       setState((currentState) => ({
         ...currentState,
         status: "error",

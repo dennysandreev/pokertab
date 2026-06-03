@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   canUseBrowserBack,
+  getClubInviteCodeFromStartParam,
   getTelegramBackFallbackPath,
   getVirtualInviteCodeFromStartParam,
   hideTelegramBackButton,
@@ -79,6 +80,12 @@ describe("readTelegramLaunchData", () => {
     expect(getVirtualInviteCodeFromStartParam("poker_q1w2e3r4")).toBe("Q1W2E3R4");
     expect(getVirtualInviteCodeFromStartParam("room_abc123")).toBeNull();
     expect(getVirtualInviteCodeFromStartParam("table_ab12cd34")).toBeNull();
+  });
+
+  it("extracts club invite code from supported prefixes", () => {
+    expect(getClubInviteCodeFromStartParam("club_invite42")).toBe("INVITE42");
+    expect(getClubInviteCodeFromStartParam("club-ab12cd")).toBe("AB12CD");
+    expect(getClubInviteCodeFromStartParam("room_abc123")).toBeNull();
   });
 });
 

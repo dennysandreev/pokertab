@@ -3,5 +3,14 @@ dist
 coverage
 .turbo
 .vite
+.playwright-mcp
+test-results
+playwright-report
 .DS_Store
 .env
+*.log
+*.tar
+*.tar.gz
+*.zip
+pokertable-*-smoke*.png
+stitch_poker_table_tracker*

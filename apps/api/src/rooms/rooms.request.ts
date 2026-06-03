@@ -33,6 +33,11 @@ export function normalizeCreateRoomRequest(body: unknown): CreateRoomRequestDto 
     payload.rebuyPermission,
     "Не удалось определить правила ребаев"
   ).trim() as RebuyPermission;
+  const clubId = normalizeNullableString(payload.clubId);
+  const scheduledStartAt = normalizeNullableString(payload.scheduledStartAt);
+  const sendClubInvites = getOptionalBoolean(payload.sendClubInvites) ?? false;
+  const maxPlayers = getOptionalInteger(payload.maxPlayers);
+  const location = normalizeNullableString(payload.location);
 
   return {
     title,
@@ -41,7 +46,12 @@ export function normalizeCreateRoomRequest(body: unknown): CreateRoomRequestDto 
     rebuyChips,
     chipsPerCurrencyUnit,
     gameType,
-    rebuyPermission
+    rebuyPermission,
+    ...(clubId !== undefined ? { clubId } : {}),
+    ...(scheduledStartAt !== undefined ? { scheduledStartAt } : {}),
+    ...(sendClubInvites ? { sendClubInvites } : {}),
+    ...(maxPlayers !== undefined ? { maxPlayers } : {}),
+    ...(location !== undefined ? { location } : {})
   };
 }
 
@@ -173,6 +183,48 @@ function getOptionalString(value: unknown): string | null {
   }
 
   if (typeof value !== "string") {
+    throw invalidInput("Некорректные данные комнаты");
+  }
+
+  return value;
+}
+
+function normalizeNullableString(value: unknown): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw invalidInput("Некорректные данные комнаты");
+  }
+
+  const normalized = value.trim();
+
+  return normalized.length > 0 ? normalized : null;
+}
+
+function getOptionalBoolean(value: unknown): boolean | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== "boolean") {
+    throw invalidInput("Некорректные данные комнаты");
+  }
+
+  return value;
+}
+
+function getOptionalInteger(value: unknown): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value)) {
     throw invalidInput("Некорректные данные комнаты");
   }
 

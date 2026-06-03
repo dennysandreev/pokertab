@@ -218,6 +218,76 @@ describe("VirtualService", () => {
     });
   });
 
+  it("creates a club event for a scheduled club table and sends invites", async () => {
+    const prisma = createPrismaMock();
+    const clubsService = createClubsServiceMock();
+    const table = createTableRecord({
+      id: "table-2",
+      inviteCode: "ZX12CV34",
+      clubId: "club-1",
+      clubEventId: "event-1",
+      scheduledStartAt: new Date("2026-05-25T18:00:00.000Z")
+    });
+
+    prisma.virtualTable.create.mockResolvedValue(
+      createTableRecord({
+        id: table.id,
+        inviteCode: table.inviteCode
+      })
+    );
+    prisma.virtualTable.update.mockResolvedValue(table);
+    prisma.virtualSeat.create.mockResolvedValue(createSeatRecord());
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: Pick<MockPrisma, "virtualTable" | "virtualSeat">) => Promise<VirtualTable>) =>
+        callback({ virtualTable: prisma.virtualTable, virtualSeat: prisma.virtualSeat })
+    );
+    clubsService.createEventForVirtualTable.mockResolvedValue("event-1");
+    clubsService.sendEventInvites.mockResolvedValue(undefined);
+
+    const service = new VirtualService(
+      prisma as unknown as PrismaService,
+      undefined,
+      clubsService as never
+    );
+
+    await service.createTable(baseUser, {
+      ...createTableInput,
+      clubId: "club-1",
+      scheduledStartAt: "2026-05-25T21:00:00.000+03:00",
+      sendClubInvites: true,
+      maxPlayers: 6
+    });
+    const createTableArgs = getFirstCall<{
+      data: {
+        clubId: string | null;
+        scheduledStartAt: Date | null;
+      };
+    }>(prisma.virtualTable.create);
+
+    expect(createTableArgs?.data.clubId).toBe("club-1");
+    expect(createTableArgs?.data.scheduledStartAt).toEqual(
+      new Date("2026-05-25T18:00:00.000Z")
+    );
+    expect(clubsService.createEventForVirtualTable).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        clubId: "club-1",
+        createdByUserId: baseUser.id,
+        virtualTableId: table.id,
+        maxPlayers: 6
+      })
+    );
+    expect(prisma.virtualTable.update).toHaveBeenCalledWith({
+      where: {
+        id: table.id
+      },
+      data: {
+        clubEventId: "event-1"
+      }
+    });
+    expect(clubsService.sendEventInvites).toHaveBeenCalledWith("event-1", "club-1");
+  });
+
   it("accepts short and large positive timer values when creating a table", async () => {
     const prisma = createPrismaMock();
     const shortTable = createTableRecord({
@@ -415,13 +485,18 @@ describe("VirtualService", () => {
   it("starts a hand and getTable returns only the viewer private cards", async () => {
     const prisma = createPrismaMock();
     const notifications = createNotificationsMock();
+    const viewerAvatarUrl = "https://cdn.example.com/avatars/user-1.png";
     const table = createTableRecord({
       seats: [
         createSeatRecord({
           id: "seat-1",
           userId: "user-1",
           seatNumber: 1,
-          role: VirtualSeatRole.OWNER
+          role: VirtualSeatRole.OWNER,
+          user: createUserRecord({
+            id: "user-1",
+            avatarUrl: viewerAvatarUrl
+          })
         }),
         createSeatRecord({
           id: "seat-2",
@@ -538,6 +613,13 @@ describe("VirtualService", () => {
       expiresAt: "2026-05-13T10:05:30.000Z",
       remindedAt: null
     });
+    expect(result.seats[0]).toMatchObject({
+      id: "seat-1",
+      avatarUrl: viewerAvatarUrl,
+      committedStreetChips: "0",
+      committedTotalChips: "0"
+    });
+    expect(result.seats[1]?.avatarUrl).toBeNull();
     expect(result.hand?.myPrivateCards).toEqual(["AS", "KH"]);
     expect(result.seats.every((seat) => !("privateCards" in seat))).toBe(true);
     expect(notifications.sendReminderNotification).not.toHaveBeenCalled();
@@ -685,10 +767,14 @@ describe("VirtualService", () => {
     expect(result.seats).toEqual([
       expect.objectContaining({
         id: "seat-1",
+        committedStreetChips: "10",
+        committedTotalChips: "10",
         winProbabilityPercent: 100
       }),
       expect.objectContaining({
         id: "seat-2",
+        committedStreetChips: "10",
+        committedTotalChips: "10",
         winProbabilityPercent: null
       }),
       expect.objectContaining({
@@ -6751,6 +6837,13 @@ function createNotificationsMock(): Pick<
   };
 }
 
+function createClubsServiceMock() {
+  return {
+    createEventForVirtualTable: jest.fn(),
+    sendEventInvites: jest.fn()
+  };
+}
+
 function getFirstCall<T>(mockFn: { mock: { calls: unknown[][] } }): T | undefined {
   const firstCall = mockFn.mock.calls[0];
 
@@ -6778,6 +6871,9 @@ function createTableRecord(
   return {
     id: "table-1",
     ownerUserId: "user-1",
+    clubId: null,
+    clubEventId: null,
+    scheduledStartAt: null,
     title: "Домашний кеш",
     maxSeats: 6,
     startingStackChips: 1000n,

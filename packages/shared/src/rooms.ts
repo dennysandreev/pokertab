@@ -81,6 +81,11 @@ export type CreateRoomRequestDto = {
   chipsPerCurrencyUnit: string;
   gameType: GameType;
   rebuyPermission: RebuyPermission;
+  clubId?: string | null;
+  scheduledStartAt?: string | null;
+  sendClubInvites?: boolean;
+  maxPlayers?: number | null;
+  location?: string | null;
 };
 
 export type CreateRoomResponseDto = {

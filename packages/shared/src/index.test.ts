@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   APP_NAME,
+  buildClubStartParam,
   buildRoomStartParam,
   chipsToMoneyMinor,
   formatChips,
   formatMinorMoney,
+  getClubInviteCodeFromStartParam,
   getInviteCodeFromStartParam,
   parseMajorMoneyToMinor
 } from "./index";
@@ -23,6 +25,17 @@ describe("shared constants", () => {
 
   it("builds Telegram room start parameter", () => {
     expect(buildRoomStartParam("abc123")).toBe("room_abc123");
+  });
+
+  it("extracts invite code from Telegram club start parameter", () => {
+    expect(getClubInviteCodeFromStartParam("club_club42")).toBe("club42");
+    expect(getClubInviteCodeFromStartParam("club_")).toBeNull();
+    expect(getClubInviteCodeFromStartParam("hello")).toBeNull();
+    expect(getClubInviteCodeFromStartParam(undefined)).toBeNull();
+  });
+
+  it("builds Telegram club start parameter", () => {
+    expect(buildClubStartParam("club42")).toBe("club_club42");
   });
 
   it("parses major money input into minor string without floats", () => {

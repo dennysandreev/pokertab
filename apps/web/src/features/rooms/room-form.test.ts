@@ -16,18 +16,23 @@ import {
   getRoomRoute
 } from "./routes";
 
+const validValues = {
+  title: "Пятничный покер",
+  currency: "rub",
+  buyInChips: "10000",
+  rebuyChips: "2500",
+  chipsPerCurrencyUnit: "100",
+  rebuyPermission: "PLAYER_SELF" as const,
+  clubId: "",
+  scheduledStartAt: "",
+  sendNotifications: true,
+  maxPlayers: "",
+  location: ""
+};
+
 describe("room form helpers", () => {
   it("builds payload with chip fields", () => {
-    expect(
-      buildCreateRoomPayload({
-        title: "Пятничный покер",
-        currency: "rub",
-        buyInChips: "10000",
-        rebuyChips: "2500",
-        chipsPerCurrencyUnit: "100",
-        rebuyPermission: "PLAYER_SELF"
-      })
-    ).toEqual({
+    expect(buildCreateRoomPayload(validValues)).toEqual({
       title: "Пятничный покер",
       currency: "RUB",
       buyInChips: "10000",
@@ -41,12 +46,9 @@ describe("room form helpers", () => {
   it("rejects invalid chip input", () => {
     expect(
       buildCreateRoomPayload({
-        title: "Пятничный покер",
+        ...validValues,
         currency: "RUB",
         buyInChips: "10.999",
-        rebuyChips: "1000",
-        chipsPerCurrencyUnit: "100",
-        rebuyPermission: "PLAYER_SELF"
       })
     ).toBeNull();
   });
@@ -54,23 +56,17 @@ describe("room form helpers", () => {
   it("rejects zero and negative chip amounts before submit", () => {
     expect(
       buildCreateRoomPayload({
-        title: "Пятничный покер",
+        ...validValues,
         currency: "RUB",
         buyInChips: "0",
-        rebuyChips: "1000",
-        chipsPerCurrencyUnit: "100",
-        rebuyPermission: "PLAYER_SELF"
       })
     ).toBeNull();
 
     expect(
       buildCreateRoomPayload({
-        title: "Пятничный покер",
+        ...validValues,
         currency: "RUB",
         buyInChips: "-100",
-        rebuyChips: "1000",
-        chipsPerCurrencyUnit: "100",
-        rebuyPermission: "PLAYER_SELF"
       })
     ).toBeNull();
   });
@@ -78,12 +74,11 @@ describe("room form helpers", () => {
   it("rejects too long room title", () => {
     expect(
       getCreateRoomValidationMessage({
-        title: "а".repeat(ROOM_TITLE_MAX_LENGTH + 1),
+        ...validValues,
         currency: "RUB",
+        title: "а".repeat(ROOM_TITLE_MAX_LENGTH + 1),
         buyInChips: "1000",
-        rebuyChips: "1000",
-        chipsPerCurrencyUnit: "100",
-        rebuyPermission: "PLAYER_SELF"
+        rebuyChips: "1000"
       })
     ).toBe("Название слишком длинное");
   });
@@ -91,12 +86,10 @@ describe("room form helpers", () => {
   it("rejects unsupported currency before submit", () => {
     expect(
       getCreateRoomValidationMessage({
-        title: "Пятничный покер",
+        ...validValues,
         currency: "GBP",
         buyInChips: "1000",
-        rebuyChips: "1000",
-        chipsPerCurrencyUnit: "100",
-        rebuyPermission: "PLAYER_SELF"
+        rebuyChips: "1000"
       })
     ).toBe("Выберите рубли, доллары или евро");
   });
@@ -104,12 +97,10 @@ describe("room form helpers", () => {
   it("rejects too large buy-in before submit", () => {
     expect(
       getCreateRoomValidationMessage({
-        title: "Пятничный покер",
+        ...validValues,
         currency: "RUB",
         buyInChips: String(ROOM_MAX_BUY_IN_CHIPS + 1),
-        rebuyChips: "1000",
-        chipsPerCurrencyUnit: "100",
-        rebuyPermission: "PLAYER_SELF"
+        rebuyChips: "1000"
       })
     ).toBe("Сумма входа слишком большая");
   });
@@ -117,12 +108,11 @@ describe("room form helpers", () => {
   it("rejects too large rate before submit", () => {
     expect(
       getCreateRoomValidationMessage({
-        title: "Пятничный покер",
+        ...validValues,
         currency: "RUB",
         buyInChips: "1000",
         rebuyChips: "1000",
-        chipsPerCurrencyUnit: String(ROOM_MAX_CHIPS_PER_CURRENCY_UNIT + 1),
-        rebuyPermission: "PLAYER_SELF"
+        chipsPerCurrencyUnit: String(ROOM_MAX_CHIPS_PER_CURRENCY_UNIT + 1)
       })
     ).toBe("Курс слишком большой");
   });
@@ -130,14 +120,44 @@ describe("room form helpers", () => {
   it("rejects too large rebuy before submit", () => {
     expect(
       getCreateRoomValidationMessage({
-        title: "Пятничный покер",
+        ...validValues,
         currency: "RUB",
         buyInChips: "1000",
-        rebuyChips: String(ROOM_MAX_REBUY_CHIPS + 1),
-        chipsPerCurrencyUnit: "100",
-        rebuyPermission: "PLAYER_SELF"
+        rebuyChips: String(ROOM_MAX_REBUY_CHIPS + 1)
       })
     ).toBe("Ребай слишком большой");
+  });
+
+  it("keeps old payload when club is not selected", () => {
+    expect(buildCreateRoomPayload(validValues)).not.toHaveProperty("clubId");
+    expect(buildCreateRoomPayload(validValues)).not.toHaveProperty("scheduledStartAt");
+  });
+
+  it("adds club scheduling fields when club is selected", () => {
+    const payload = buildCreateRoomPayload({
+      ...validValues,
+      clubId: "club-1",
+      scheduledStartAt: "2026-05-24T21:00",
+      maxPlayers: "9",
+      location: "У Дениса"
+    });
+
+    expect(payload).toMatchObject({
+      clubId: "club-1",
+      maxPlayers: 9,
+      location: "У Дениса",
+      sendNotifications: true
+    });
+    expect(payload?.scheduledStartAt?.startsWith("2026-05-24T21:00:00")).toBe(true);
+  });
+
+  it("requires schedule when club is selected", () => {
+    expect(
+      getCreateRoomValidationMessage({
+        ...validValues,
+        clubId: "club-1"
+      })
+    ).toBe("Выберите дату и время");
   });
 
   it("builds room routes", () => {

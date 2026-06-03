@@ -99,6 +99,10 @@ export type CreateVirtualTableRequestDto = {
   reminderDelaySeconds: number;
   timeoutAutoActionRule: VirtualTimeoutAutoActionRule;
   winProbabilityEnabled: boolean;
+  clubId?: string | null;
+  scheduledStartAt?: string | null;
+  sendClubInvites?: boolean;
+  maxPlayers?: number | null;
 };
 
 export type CreateVirtualTableResponseDto = {
@@ -156,9 +160,12 @@ export type VirtualSeatDto = {
   id: string;
   userId: string;
   displayName: string | null;
+  avatarUrl: string | null;
   seatNumber: number;
   role: VirtualSeatRole;
   stackChips: string;
+  committedStreetChips: string;
+  committedTotalChips: string;
   status: VirtualSeatStatus;
   isDealer: boolean;
   isSmallBlind: boolean;
@@ -272,6 +279,7 @@ export type VirtualTablesListItemDto = {
   maxSeats: number;
   currentHandId: string | null;
   startingStackChips: string;
+  myStackChips?: string;
   chipValueMinor: string | null;
   chipValueCurrency: string | null;
   smallBlindChips: string;

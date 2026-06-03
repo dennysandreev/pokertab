@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   appendMiniAppCacheBuster,
   buildDiagnosticResponse,
+  buildClubEventRsvpAnswerText,
+  buildClubInviteDeepLink,
+  buildOfflineClubEventNotificationPayload,
+  buildOnlineClubEventNotificationPayload,
   buildHelpResponse,
   buildMiniAppPathUrl,
   buildRoomInviteDeepLink,
@@ -12,8 +16,18 @@ import {
   buildVirtualTableStartResponse,
   buildVirtualTimeoutNotification,
   getBotStatus,
-  resolveCommandResponse
+  handleCallbackQuery,
+  parseClubEventRsvpCallback,
+  resolveCommandResponse,
+  submitClubEventRsvp,
+  TELEGRAM_ALLOWED_UPDATES
 } from "./index.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  delete process.env.API_URL;
+  delete process.env.WEB_APP_URL;
+});
 
 describe("getBotStatus", () => {
   it("returns bot service status", () => {
@@ -67,6 +81,14 @@ describe("buildVirtualTableInviteDeepLink", () => {
   it("builds Telegram startapp link for virtual table invites", () => {
     expect(buildVirtualTableInviteDeepLink("poker_bot", "virtual-1")).toBe(
       "https://t.me/poker_bot/app?startapp=virtual_table_virtual-1"
+    );
+  });
+});
+
+describe("buildClubInviteDeepLink", () => {
+  it("builds Telegram startapp link for club invites", () => {
+    expect(buildClubInviteDeepLink("poker_bot", "club-1")).toBe(
+      "https://t.me/poker_bot/app?startapp=club_club-1"
     );
   });
 });
@@ -177,6 +199,142 @@ describe("resolveCommandResponse", () => {
   });
 });
 
+describe("TELEGRAM_ALLOWED_UPDATES", () => {
+  it("includes both messages and callback queries", () => {
+    expect(TELEGRAM_ALLOWED_UPDATES).toEqual(["message", "callback_query"]);
+  });
+});
+
+describe("parseClubEventRsvpCallback", () => {
+  it("parses club RSVP callback data", () => {
+    expect(parseClubEventRsvpCallback("club_event_rsvp:event-1:GOING")).toEqual({
+      eventId: "event-1",
+      status: "GOING"
+    });
+  });
+
+  it("returns null for unsupported callback payloads", () => {
+    expect(parseClubEventRsvpCallback("room_rsvp:event-1:GOING")).toBeNull();
+    expect(parseClubEventRsvpCallback("club_event_rsvp:event-1:WAITLIST")).toBeNull();
+  });
+});
+
+describe("club event notification builders", () => {
+  it("builds offline notification payload with RSVP and web app buttons", () => {
+    expect(
+      buildOfflineClubEventNotificationPayload({
+        clubName: "Poker Club Denis",
+        eventId: "event-1",
+        title: "Friday Poker",
+        scheduledLabel: "24 мая, 21:00",
+        location: "У Дениса",
+        buyIn: "1 000 ₽",
+        miniAppUrl: "https://pokertab.ru/clubs/event-1"
+      })
+    ).toEqual({
+      text: [
+        "🃏 Новая игра в клубе Poker Club Denis",
+        "",
+        "Friday Poker",
+        "24 мая, 21:00",
+        "Место: У Дениса",
+        "Ребай: 1 000 ₽",
+        "",
+        "Вы придете?"
+      ].join("\n"),
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Приду", callback_data: "club_event_rsvp:event-1:GOING" },
+            { text: "❓ Возможно", callback_data: "club_event_rsvp:event-1:MAYBE" },
+            { text: "❌ Не смогу", callback_data: "club_event_rsvp:event-1:DECLINED" }
+          ],
+          [
+            {
+              text: "Открыть мероприятие",
+              web_app: {
+                url: "https://pokertab.ru/clubs/event-1"
+              }
+            }
+          ]
+        ]
+      }
+    });
+  });
+
+  it("builds online notification payload with RSVP and web app buttons", () => {
+    expect(
+      buildOnlineClubEventNotificationPayload({
+        clubName: "Poker Club Denis",
+        eventId: "event-2",
+        title: "Sunday Online Poker",
+        scheduledLabel: "26 мая, 20:00",
+        gameLabel: "Texas Hold'em",
+        stackLabel: "10 000 фишек",
+        blindsLabel: "50 / 100",
+        miniAppUrl: "https://pokertab.ru/clubs/event-2"
+      })
+    ).toEqual({
+      text: [
+        "♠️ Запланирован онлайн-стол в клубе Poker Club Denis",
+        "",
+        "Sunday Online Poker",
+        "Старт: 26 мая, 20:00",
+        "Texas Hold'em",
+        "Стек: 10 000 фишек",
+        "Блайнды: 50 / 100",
+        "",
+        "Будете играть?"
+      ].join("\n"),
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Играю", callback_data: "club_event_rsvp:event-2:GOING" },
+            { text: "❌ Не смогу", callback_data: "club_event_rsvp:event-2:DECLINED" }
+          ],
+          [
+            {
+              text: "Открыть стол",
+              web_app: {
+                url: "https://pokertab.ru/clubs/event-2"
+              }
+            }
+          ]
+        ]
+      }
+    });
+  });
+});
+
+describe("buildClubEventRsvpAnswerText", () => {
+  it("uses API message when provided", () => {
+    expect(
+      buildClubEventRsvpAnswerText(
+        {
+          status: "success",
+          message: "Готово из API."
+        },
+        "GOING"
+      )
+    ).toBe("Готово из API.");
+  });
+
+  it("builds fallback texts for result statuses", () => {
+    expect(buildClubEventRsvpAnswerText({ status: "success" }, "GOING")).toBe(
+      "Готово. Ваш ответ: Приду."
+    );
+    expect(buildClubEventRsvpAnswerText({ status: "waitlist" }, "GOING")).toBe(
+      "Места закончились. Вы добавлены в лист ожидания."
+    );
+    expect(buildClubEventRsvpAnswerText({ status: "cancelled" }, "GOING")).toBe(
+      "Мероприятие отменено."
+    );
+    expect(buildClubEventRsvpAnswerText({ status: "non-member" }, "GOING")).toBe(
+      "Вы не являетесь участником этого клуба."
+    );
+  });
+});
+
 describe("buildDiagnosticResponse", () => {
   it("returns diagnostic Mini App button", () => {
     expect(buildDiagnosticResponse("https://pokertab.ru/mini-probe.html")).toEqual({
@@ -208,5 +366,152 @@ describe("buildMiniAppPathUrl", () => {
     expect(buildMiniAppPathUrl("https://pokertab.ru/?ptb=release-1", "/mini-probe.html")).toBe(
       "https://pokertab.ru/mini-probe.html?ptb=release-1"
     );
+  });
+});
+
+describe("submitClubEventRsvp", () => {
+  it("posts eventId, telegramId and status to the internal API with bot auth header", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: "success" })
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      submitClubEventRsvp({
+        apiBaseUrl: "https://api.pokertab.test/base",
+        botToken: "bot-token",
+        eventId: "event-42",
+        telegramId: 123456,
+        status: "MAYBE"
+      })
+    ).resolves.toEqual({ status: "success" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://api.pokertab.test/api/clubs/telegram/rsvp"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-telegram-bot-token": "bot-token"
+        },
+        body: JSON.stringify({
+          eventId: "event-42",
+          telegramId: 123456,
+          status: "MAYBE"
+        })
+      }
+    );
+  });
+});
+
+describe("handleCallbackQuery", () => {
+  it("answers callback with success fallback text", async () => {
+    process.env.API_URL = "https://api.pokertab.test/v1";
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ status: "success" })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, result: true })
+      });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handleCallbackQuery("telegram-bot-token", {
+      id: "callback-1",
+      from: { id: 777 },
+      data: "club_event_rsvp:event-9:GOING"
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL("https://api.pokertab.test/api/clubs/telegram/rsvp"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-telegram-bot-token": "telegram-bot-token"
+        },
+        body: JSON.stringify({
+          eventId: "event-9",
+          telegramId: 777,
+          status: "GOING"
+        })
+      }
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.telegram.org/bottelegram-bot-token/answerCallbackQuery",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          callback_query_id: "callback-1",
+          text: "Готово. Ваш ответ: Приду."
+        })
+      }
+    );
+  });
+
+  it("answers callback for waitlist, cancelled and non-member results", async () => {
+    const scenarios = [
+      {
+        apiResult: { status: "waitlist" },
+        expectedText: "Места закончились. Вы добавлены в лист ожидания."
+      },
+      {
+        apiResult: { status: "cancelled" },
+        expectedText: "Мероприятие отменено."
+      },
+      {
+        apiResult: { status: "non-member" },
+        expectedText: "Вы не являетесь участником этого клуба."
+      }
+    ] as const;
+
+    for (const [index, scenario] of scenarios.entries()) {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(scenario.apiResult)
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: true })
+        });
+
+      vi.stubGlobal("fetch", fetchMock);
+
+      await handleCallbackQuery("telegram-bot-token", {
+        id: `callback-${index}`,
+        from: { id: 999 },
+        data: "club_event_rsvp:event-11:DECLINED"
+      });
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        "https://api.telegram.org/bottelegram-bot-token/answerCallbackQuery",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            callback_query_id: `callback-${index}`,
+            text: scenario.expectedText
+          })
+        }
+      );
+    }
   });
 });

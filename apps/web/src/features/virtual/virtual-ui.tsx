@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const virtualScreenClassName =
-  "min-h-[100dvh] bg-[#0f0f0f] pb-[calc(env(safe-area-inset-bottom)+11rem)] pt-4 text-white";
+  "min-h-[100dvh] bg-transparent pb-[calc(env(safe-area-inset-bottom)+11rem)] pt-4 text-white";
 
 export const virtualInputClassName =
   "mt-3 min-h-12 w-full rounded-xl border border-white/10 bg-[#1c1b1b] px-4 py-3 text-[15px] text-white outline-none transition placeholder:text-[#7f8487] focus:border-[#4edea3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4edea3]";

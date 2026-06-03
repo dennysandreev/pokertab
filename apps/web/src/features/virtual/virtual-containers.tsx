@@ -13,8 +13,9 @@ import type {
   VirtualTableReactionDto,
   VirtualTableReactionEmoji
 } from "@pokertable/shared";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { IllustratedPanel, VisualEmptyState } from "@/components/visual";
 import {
   ApiRequestError,
   cancelVirtualTable,
@@ -37,6 +38,9 @@ import {
   submitVirtualAction
 } from "@/lib/api";
 import { useSession } from "@/session/session-context";
+import { useClubsList } from "../clubs/club-data";
+import { useUpcomingClubEvents } from "../clubs/club-home-events";
+import { getClubEventRoute } from "../clubs/routes";
 import {
   buildCreateVirtualTablePayload,
   buildJoinVirtualTablePayload,
@@ -79,12 +83,11 @@ import {
   type VirtualTableReactionAnimation
 } from "./virtual-table-view";
 import {
-  EmptyState,
   GlassPanel,
   RolePill,
-  ScreenHeader,
   virtualScreenClassName
 } from "./virtual-ui";
+import { resolveMiniAppVisual } from "../visual/mini-app-visuals";
 
 const DEFAULT_CREATE_VALUES: CreateVirtualTableFormValues = {
   title: "",
@@ -96,7 +99,10 @@ const DEFAULT_CREATE_VALUES: CreateVirtualTableFormValues = {
   turnDurationSeconds: "30",
   reminderDelaySeconds: "15",
   timeoutAutoActionRule: "CHECK_OR_FOLD",
-  winProbabilityEnabled: false
+  winProbabilityEnabled: false,
+  clubId: "",
+  scheduledStartAt: "",
+  sendNotifications: true
 };
 
 export const VIRTUAL_TABLE_TOAST_DISMISS_MS = 5000;
@@ -157,6 +163,7 @@ export function VirtualLobbyContainer(): JSX.Element {
   const navigate = useNavigate();
   const { state } = useSession();
   const { virtualTablesState, refreshVirtualTables } = useVirtualTablesList();
+  const onlineEventsState = useUpcomingClubEvents("ONLINE_TABLE");
   const [joinCode, setJoinCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -166,6 +173,7 @@ export function VirtualLobbyContainer(): JSX.Element {
   const activeTables = items.filter((table) => table.status === "ACTIVE" || table.status === "PAUSED");
   const waitingTables = items.filter((table) => table.status === "WAITING_FOR_PLAYERS");
   const recentTables = items.filter((table) => table.status === "FINISHED" || table.status === "CANCELLED");
+  const nearestOnlineEvent = onlineEventsState.events[0] ?? null;
 
   const handleJoinSubmit = useCallback(async (): Promise<void> => {
     if (!state.accessToken) {
@@ -238,6 +246,7 @@ export function VirtualLobbyContainer(): JSX.Element {
         activeTables={activeTables}
         joinCode={joinCode}
         myTables={myTables}
+        nearestEvent={nearestOnlineEvent}
         onCreateTable={() => {
           void navigate(getCreateVirtualTableRoute());
         }}
@@ -251,6 +260,9 @@ export function VirtualLobbyContainer(): JSX.Element {
         onOpenTable={(tableId) => {
           void navigate(getVirtualTableRoute(tableId));
         }}
+        onOpenNearestEvent={(clubId, eventId) => {
+          void navigate(getClubEventRoute(clubId, eventId));
+        }}
         recentTables={recentTables}
         waitingTables={waitingTables}
       />
@@ -260,13 +272,31 @@ export function VirtualLobbyContainer(): JSX.Element {
 
 export function CreateVirtualTableContainer(): JSX.Element {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { state } = useSession();
+  const { clubsState } = useClubsList();
   const { refreshVirtualTables } = useVirtualTablesList();
   const [values, setValues] = useState<CreateVirtualTableFormValues>(DEFAULT_CREATE_VALUES);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const clubIdFromQuery = searchParams.get("clubId")?.trim() ?? "";
 
   const validationMessage = getCreateVirtualTableValidationMessage(values) ?? submitError;
+
+  useEffect(() => {
+    if (!clubIdFromQuery) {
+      return;
+    }
+
+    setValues((current) =>
+      current.clubId === clubIdFromQuery
+        ? current
+        : {
+            ...current,
+            clubId: clubIdFromQuery
+          }
+    );
+  }, [clubIdFromQuery]);
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (!state.accessToken) {
@@ -305,6 +335,11 @@ export function CreateVirtualTableContainer(): JSX.Element {
 
   return (
     <CreateVirtualTableScreen
+      clubs={(clubsState.data?.clubs ?? []).map((club) => ({
+        id: club.id,
+        name: club.name
+      }))}
+      isLoadingClubs={clubsState.status === "loading"}
       isSubmitting={isSubmitting}
       onChange={(field, value) => {
         setValues((current) => ({
@@ -1483,26 +1518,26 @@ function VirtualRouteState({
   tone?: "idle" | "loading" | "error";
   action?: JSX.Element;
 }): JSX.Element {
+  const stateTitle =
+    tone === "error" ? "Пока не получилось" : tone === "loading" ? "Загружаем" : "Нужен вход";
+  const imageSrc = resolveMiniAppVisual(tone === "error" ? "offline" : "online");
+
   return (
     <div className={virtualScreenClassName}>
-      <div className="mx-auto max-w-3xl space-y-6 pb-8">
-        <ScreenHeader
-          eyebrow={title}
-          title={title}
+      <div className="mx-auto max-w-3xl space-y-4 pb-8">
+        <IllustratedPanel
           description={description}
-          trailing={tone === "loading" ? <RolePill tone="positive">В игре</RolePill> : undefined}
+          eyebrow="Онлайн"
+          imageSrc={imageSrc}
+          tone={tone === "error" ? "amber" : "emerald"}
+          title={title}
         />
-        <EmptyState
+        <VisualEmptyState
           action={action}
           description={description}
-          icon={tone === "error" ? "warning" : tone === "loading" ? "hourglass_top" : "lock"}
-          title={
-            tone === "error"
-              ? "Нужно еще одно действие"
-              : tone === "loading"
-                ? "Загружаем"
-                : "Пока недоступно"
-          }
+          imageSrc={imageSrc}
+          title={stateTitle}
+          tone={tone === "error" ? "amber" : "graphite"}
         />
       </div>
     </div>

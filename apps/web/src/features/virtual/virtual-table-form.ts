@@ -2,6 +2,7 @@ import type {
   CreateVirtualTableRequestDto,
   VirtualTimeoutAutoActionRule
 } from "@pokertable/shared";
+import { buildOffsetDateTimeString } from "../clubs/club-view";
 
 export const VIRTUAL_TABLE_TITLE_MAX_LENGTH = 80;
 export const VIRTUAL_TABLE_MIN_SEATS = 2;
@@ -20,6 +21,15 @@ export type CreateVirtualTableFormValues = {
   reminderDelaySeconds: string;
   timeoutAutoActionRule: VirtualTimeoutAutoActionRule | "";
   winProbabilityEnabled: boolean;
+  clubId?: string;
+  scheduledStartAt?: string;
+  sendNotifications?: boolean;
+};
+
+export type CreateVirtualTablePayload = CreateVirtualTableRequestDto & {
+  clubId?: string;
+  scheduledStartAt?: string;
+  sendNotifications?: boolean;
 };
 
 export type JoinVirtualTableFormValues = {
@@ -28,27 +38,40 @@ export type JoinVirtualTableFormValues = {
 
 export function buildCreateVirtualTablePayload(
   values: CreateVirtualTableFormValues
-): CreateVirtualTableRequestDto | null {
+): CreateVirtualTablePayload | null {
   if (getCreateVirtualTableValidationMessage(values)) {
     return null;
   }
 
   const title = values.title.trim();
   const chipsPerCurrencyUnit = normalizePositiveIntegerString(values.chipsPerCurrencyUnit)!;
-
-  return {
+  const bigBlindChips = normalizePositiveIntegerString(values.bigBlindChips)!;
+  const payload: CreateVirtualTablePayload = {
     title,
     maxSeats: Number.parseInt(values.maxSeats.trim(), 10),
     startingStackChips: normalizePositiveIntegerString(values.startingStackChips)!,
     chipValueMinor: convertChipsPerCurrencyUnitToChipValueMinor(chipsPerCurrencyUnit),
     chipValueCurrency: "RUB",
-    smallBlindChips: normalizePositiveIntegerString(values.smallBlindChips)!,
-    bigBlindChips: normalizePositiveIntegerString(values.bigBlindChips)!,
+    smallBlindChips: deriveSmallBlindChips(bigBlindChips),
+    bigBlindChips,
     turnDurationSeconds: Number.parseInt(values.turnDurationSeconds.trim(), 10),
     reminderDelaySeconds: Number.parseInt(values.reminderDelaySeconds.trim(), 10),
     timeoutAutoActionRule: values.timeoutAutoActionRule as VirtualTimeoutAutoActionRule,
     winProbabilityEnabled: values.winProbabilityEnabled
   };
+
+  const clubId = (values.clubId ?? "").trim();
+  const scheduledStartAt = buildOffsetDateTimeString(values.scheduledStartAt ?? "");
+
+  if (clubId.length > 0) {
+    return {
+      ...payload,
+      clubId,
+      scheduledStartAt: scheduledStartAt!,
+      sendNotifications: values.sendNotifications ?? false
+    };
+  }
+  return payload;
 }
 
 export function getCreateVirtualTableValidationMessage(
@@ -57,11 +80,11 @@ export function getCreateVirtualTableValidationMessage(
   const title = values.title.trim();
   const maxSeats = parsePositiveInteger(values.maxSeats);
   const startingStackChips = parsePositiveInteger(values.startingStackChips);
-  const smallBlindChips = parsePositiveInteger(values.smallBlindChips);
   const bigBlindChips = parsePositiveInteger(values.bigBlindChips);
   const turnDurationSeconds = parsePositiveInteger(values.turnDurationSeconds);
   const reminderDelaySeconds = parsePositiveInteger(values.reminderDelaySeconds);
   const chipsPerCurrencyUnit = parsePositiveInteger(values.chipsPerCurrencyUnit);
+  const hasSelectedClub = (values.clubId ?? "").trim().length > 0;
 
   if (title.length === 0) {
     return "Как назвать стол?";
@@ -87,27 +110,16 @@ export function getCreateVirtualTableValidationMessage(
     return "Стек слишком большой";
   }
 
-  if (smallBlindChips === null) {
-    return "Малый блайнд должен быть больше нуля";
-  }
-
   if (bigBlindChips === null) {
     return "Большой блайнд должен быть больше нуля";
   }
 
-  if (
-    smallBlindChips > VIRTUAL_TABLE_MAX_CHIPS ||
-    bigBlindChips > VIRTUAL_TABLE_MAX_CHIPS
-  ) {
+  if (bigBlindChips < 2) {
+    return "Большой блайнд должен быть от 2 фишек";
+  }
+
+  if (bigBlindChips > VIRTUAL_TABLE_MAX_CHIPS) {
     return "Блайнды слишком большие";
-  }
-
-  if (bigBlindChips < smallBlindChips) {
-    return "Большой блайнд не меньше малого";
-  }
-
-  if (smallBlindChips === bigBlindChips) {
-    return "Блайнды не должны совпадать";
   }
 
   if (turnDurationSeconds === null) {
@@ -132,6 +144,10 @@ export function getCreateVirtualTableValidationMessage(
 
   if (!values.timeoutAutoActionRule) {
     return "Выберите действие по тайм-ауту";
+  }
+
+  if (hasSelectedClub && !buildOffsetDateTimeString(values.scheduledStartAt ?? "")) {
+    return "Выберите дату и время старта";
   }
 
   return null;
@@ -184,6 +200,17 @@ export function convertChipsPerCurrencyUnitToChipValueMinor(
 
   const rate = BigInt(normalized);
   return ((100n + rate - 1n) / rate).toString();
+}
+
+export function deriveSmallBlindChips(bigBlindChips: string): string {
+  const normalized = normalizePositiveIntegerString(bigBlindChips);
+
+  if (!normalized) {
+    return "";
+  }
+
+  const bigBlind = Number.parseInt(normalized, 10);
+  return String(Math.max(1, Math.floor(bigBlind / 2)));
 }
 
 function normalizePositiveIntegerString(value: string): string | null {

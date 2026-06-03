@@ -40,6 +40,7 @@ import type {
   UserDto
 } from "@pokertable/shared";
 import { randomBytes } from "node:crypto";
+import { ClubsService } from "../clubs/clubs.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { PlayerStatsService } from "../player-stats/player-stats.service";
 import { ApiError } from "../shared/api-error";
@@ -132,7 +133,8 @@ class DuplicateIdempotencyReservationError extends Error {}
 export class RoomsService {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() private readonly playerStatsService?: PlayerStatsService
+    @Optional() private readonly playerStatsService?: PlayerStatsService,
+    @Optional() private readonly clubsService?: ClubsService
   ) {}
 
   async listRooms(user: UserDto): Promise<RoomsListResponseDto> {
@@ -205,6 +207,12 @@ export class RoomsService {
     input: CreateRoomRequestDto
   ): Promise<CreateRoomResponseDto> {
     this.validateCreateRoomInput(input);
+    const scheduledStartAt = input.clubId
+      ? parseScheduledStartAt(
+          input.scheduledStartAt,
+          "Выберите дату и время мероприятия"
+        )
+      : null;
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const inviteCode = this.createInviteCode();
@@ -226,6 +234,8 @@ export class RoomsService {
               chipsPerCurrencyUnit: Number(input.chipsPerCurrencyUnit),
               gameType: input.gameType,
               rebuyPermission: input.rebuyPermission,
+              clubId: input.clubId ?? null,
+              scheduledStartAt,
               inviteCode,
               status: PrismaRoomStatus.WAITING
             }
@@ -241,8 +251,42 @@ export class RoomsService {
             }
           });
 
+          if (input.clubId) {
+            if (!this.clubsService) {
+              throw new ApiError(
+                ROOM_ERROR_CODES.invalidInput,
+                "Клубы временно недоступны",
+                HttpStatus.INTERNAL_SERVER_ERROR
+              );
+            }
+
+            const clubEventId = await this.clubsService.createEventForRoom(tx, {
+              clubId: input.clubId,
+              createdByUserId: user.id,
+              type: "OFFLINE_POKER",
+              title: input.title,
+              scheduledStartAt: scheduledStartAt as Date,
+              maxPlayers: input.maxPlayers ?? null,
+              location: input.location ?? null,
+              offlineRoomId: createdRoom.id
+            });
+
+            return tx.room.update({
+              where: {
+                id: createdRoom.id
+              },
+              data: {
+                clubEventId
+              }
+            });
+          }
+
           return createdRoom;
         });
+
+        if (input.clubId && input.sendClubInvites && room.clubEventId && this.clubsService) {
+          await this.clubsService.sendEventInvites(room.clubEventId, input.clubId);
+        }
 
         return {
           room: {
@@ -1176,6 +1220,26 @@ export class RoomsService {
         HttpStatus.BAD_REQUEST
       );
     }
+
+    if (input.clubId) {
+      parseScheduledStartAt(input.scheduledStartAt, "Выберите дату и время мероприятия");
+    }
+
+    if (input.maxPlayers !== undefined && input.maxPlayers !== null && input.maxPlayers <= 0) {
+      throw new ApiError(
+        ROOM_ERROR_CODES.invalidInput,
+        "Лимит игроков должен быть больше нуля",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    if (input.location && input.location.trim().length > 120) {
+      throw new ApiError(
+        ROOM_ERROR_CODES.invalidInput,
+        "Место проведения получилось слишком длинным",
+        HttpStatus.BAD_REQUEST
+      );
+    }
   }
 
   private async getAccessibleMembership(
@@ -1757,6 +1821,23 @@ function toNullableNumber(value: string): number | null {
   const parsed = Number(value);
 
   return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function parseScheduledStartAt(
+  value: string | null | undefined,
+  message: string
+): Date {
+  if (!value) {
+    throw new ApiError(ROOM_ERROR_CODES.invalidInput, message, HttpStatus.BAD_REQUEST);
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw new ApiError(ROOM_ERROR_CODES.invalidInput, message, HttpStatus.BAD_REQUEST);
+  }
+
+  return parsed;
 }
 
 function getRebuySource({

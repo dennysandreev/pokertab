@@ -35,6 +35,8 @@ import type {
   RaiseVirtualBlindsResponseDto,
   RequestVirtualSitOutRequestDto,
   RequestVirtualSitOutResponseDto,
+  ResolveInviteCodeRequestDto,
+  ResolveInviteCodeResponseDto,
   ReturnToRoomResponseDto,
   RoomsListResponseDto,
   ReturnToVirtualTableResponseDto,
@@ -54,6 +56,30 @@ import type {
   FinishVirtualTableResponseDto,
   CancelVirtualTableResponseDto
 } from "@pokertable/shared";
+import type {
+  CancelClubEventRequestDto,
+  CancelClubEventResponseDto,
+  ClubEventListItemDto,
+  ClubEventsQueryDto,
+  ClubSummaryDto,
+  ClubInviteLinkResponseDto,
+  CreateClubRequestDto,
+  CreateClubResponseDto,
+  GetClubDashboardResponseDto,
+  GetClubEventDetailsResponseDto,
+  GetClubEventsResponseDto,
+  GetClubJoinPreviewResponseDto,
+  GetClubMembersResponseDto,
+  GetMyClubsResponseDto,
+  JoinClubByInviteRequestDto,
+  JoinClubResponseDto,
+  UpdateClubEventRsvpRequestDto,
+  UpdateClubEventRsvpResponseDto,
+  UpdateClubMemberRequestDto,
+  UpdateClubMemberResponseDto,
+  UpdateClubRequestDto,
+  UpdateClubResponseDto
+} from "../features/clubs/types";
 
 type VirtualLeaderboardQuery = Partial<
   Pick<GetVirtualLeaderboardQueryDto, "limit" | "cursor"> & {
@@ -134,6 +160,17 @@ export async function joinRoom(
   payload: JoinRoomRequestDto
 ): Promise<JoinRoomResponseDto> {
   return apiRequest<JoinRoomResponseDto>("/api/rooms/join", {
+    method: "POST",
+    headers: getAuthorizedHeaders(accessToken),
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function resolveInviteCode(
+  accessToken: string,
+  payload: ResolveInviteCodeRequestDto
+): Promise<ResolveInviteCodeResponseDto> {
+  return apiRequest<ResolveInviteCodeResponseDto>("/api/invites/resolve", {
     method: "POST",
     headers: getAuthorizedHeaders(accessToken),
     body: JSON.stringify(payload)
@@ -449,6 +486,244 @@ export async function getMyVirtualStats(
   });
 }
 
+export async function getClubs(accessToken: string): Promise<GetMyClubsResponseDto> {
+  return apiRequest<GetMyClubsResponseDto>("/api/clubs", {
+    headers: getAuthorizedHeaders(accessToken)
+  });
+}
+
+export async function createClub(
+  accessToken: string,
+  payload: CreateClubRequestDto
+): Promise<CreateClubResponseDto> {
+  return apiRequest<CreateClubResponseDto>("/api/clubs", {
+    method: "POST",
+    headers: getAuthorizedHeaders(accessToken),
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getClub(
+  accessToken: string,
+  clubId: string
+): Promise<GetClubDashboardResponseDto> {
+  const response = await apiRequest<GetClubDashboardResponseDto>(`/api/clubs/${clubId}`, {
+    headers: getAuthorizedHeaders(accessToken)
+  });
+  const role = response.club?.myRole;
+  const isManager = role === "OWNER" || role === "ADMIN";
+
+  return {
+    ...response,
+    canCreateEvents: response.canCreateEvents ?? isManager,
+    canInviteMembers: response.canInviteMembers ?? isManager,
+    canManageClub: response.canManageClub ?? isManager,
+    canDeleteClub: response.canDeleteClub ?? role === "OWNER"
+  };
+}
+
+export async function updateClub(
+  accessToken: string,
+  clubId: string,
+  payload: UpdateClubRequestDto
+): Promise<UpdateClubResponseDto> {
+  return apiRequest<UpdateClubResponseDto>(`/api/clubs/${clubId}`, {
+    method: "PATCH",
+    headers: getAuthorizedHeaders(accessToken),
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteClub(
+  accessToken: string,
+  clubId: string
+): Promise<void> {
+  await apiRequest<null>(`/api/clubs/${clubId}`, {
+    method: "DELETE",
+    headers: getAuthorizedHeaders(accessToken)
+  });
+}
+
+export async function getClubJoinPreview(
+  accessToken: string,
+  inviteCode: string
+): Promise<GetClubJoinPreviewResponseDto> {
+  const response = await apiRequest<GetClubJoinPreviewResponseDto>(`/api/clubs/invites/${inviteCode}`, {
+    headers: getAuthorizedHeaders(accessToken)
+  });
+
+  return {
+    ...response,
+    club: response.club ? normalizeClubSummary(response.club) : response.club
+  };
+}
+
+export async function joinClub(
+  accessToken: string,
+  clubId: string,
+  payload: JoinClubByInviteRequestDto
+): Promise<JoinClubResponseDto> {
+  return apiRequest<JoinClubResponseDto>(`/api/clubs/${clubId}/join`, {
+    method: "POST",
+    headers: getAuthorizedHeaders(accessToken),
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getClubMembers(
+  accessToken: string,
+  clubId: string
+): Promise<GetClubMembersResponseDto> {
+  return apiRequest<GetClubMembersResponseDto>(`/api/clubs/${clubId}/members`, {
+    headers: getAuthorizedHeaders(accessToken)
+  });
+}
+
+export async function createClubInviteLink(
+  accessToken: string,
+  clubId: string
+): Promise<ClubInviteLinkResponseDto> {
+  const response = await apiRequest<ClubInviteLinkResponseDto & { inviteLink?: string }>(`/api/clubs/${clubId}/invite-link`, {
+    method: "POST",
+    headers: getAuthorizedHeaders(accessToken)
+  });
+
+  return {
+    ...response,
+    inviteUrl: response.inviteUrl ?? response.inviteLink ?? "",
+    inviteLink: response.inviteLink ?? response.inviteUrl ?? ""
+  };
+}
+
+export async function updateClubMember(
+  accessToken: string,
+  clubId: string,
+  memberId: string,
+  payload: UpdateClubMemberRequestDto
+): Promise<UpdateClubMemberResponseDto> {
+  return apiRequest<UpdateClubMemberResponseDto>(`/api/clubs/${clubId}/members/${memberId}`, {
+    method: "PATCH",
+    headers: getAuthorizedHeaders(accessToken),
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getClubEvents(
+  accessToken: string,
+  clubId: string,
+  query: ClubEventsQueryDto = {}
+): Promise<GetClubEventsResponseDto> {
+  const response = await apiRequest<GetClubEventsResponseDto>(`/api/clubs/${clubId}/events${buildQueryString(query)}`, {
+    headers: getAuthorizedHeaders(accessToken)
+  });
+
+  return {
+    ...response,
+    events: (response.events ?? []).map(normalizeClubEvent)
+  };
+}
+
+export async function getClubEvent(
+  accessToken: string,
+  clubId: string,
+  eventId: string
+): Promise<GetClubEventDetailsResponseDto> {
+  const response = await apiRequest<{
+    club?: ClubSummaryDto;
+    event: ClubEventListItemDto & Record<string, unknown>;
+    myRsvp?: GetClubEventDetailsResponseDto["myRsvp"];
+    rsvpGroups?: GetClubEventDetailsResponseDto["rsvpGroups"];
+    rsvps?: GetClubEventDetailsResponseDto["rsvpGroups"] | null;
+    canManage?: boolean;
+    canRespond?: boolean;
+  }>(`/api/clubs/${clubId}/events/${eventId}`, {
+    headers: getAuthorizedHeaders(accessToken)
+  });
+
+  const rawMyRsvpStatus =
+    typeof response.event?.myRsvpStatus === "string"
+      ? response.event.myRsvpStatus
+      : null;
+  const fallbackEvent = {
+    id: eventId,
+    clubId,
+    createdByUserId: "",
+    type: "OFFLINE_POKER",
+    title: "Мероприятие",
+    scheduledStartAt: new Date(0).toISOString(),
+    status: "SCHEDULED",
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString()
+  } as ClubEventListItemDto;
+  const event = normalizeClubEvent(response.event ?? fallbackEvent);
+  const rsvpGroups = response.rsvpGroups ?? response.rsvps ?? createEmptyClubRsvpGroups();
+  const fallbackClub: ClubSummaryDto = {
+    id: clubId,
+    ownerUserId: "",
+    name: "Клуб",
+    privacy: "PRIVATE_INVITE_ONLY",
+    inviteCode: "",
+    createdAt: event.createdAt,
+    updatedAt: event.updatedAt
+  };
+
+  return {
+    club: response.club ?? fallbackClub,
+    event,
+    myMembership: null,
+    myRsvp: response.myRsvp ?? (rawMyRsvpStatus ? {
+      id: `${event.id}:${clubId}`,
+      clubEventId: event.id,
+      clubId,
+      userId: "",
+      status: rawMyRsvpStatus,
+      respondedAt: null,
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt
+    } : null),
+    rsvpGroups,
+    canManage: response.canManage ?? false,
+    canRespond: response.canRespond ?? true
+  };
+}
+
+export async function updateClubEventRsvp(
+  accessToken: string,
+  clubId: string,
+  eventId: string,
+  payload: UpdateClubEventRsvpRequestDto
+): Promise<UpdateClubEventRsvpResponseDto> {
+  return apiRequest<UpdateClubEventRsvpResponseDto>(`/api/clubs/${clubId}/events/${eventId}/rsvp`, {
+    method: "PATCH",
+    headers: getAuthorizedHeaders(accessToken),
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function sendClubEventReminder(
+  accessToken: string,
+  clubId: string,
+  eventId: string
+): Promise<void> {
+  await apiRequest<null>(`/api/clubs/${clubId}/events/${eventId}/remind`, {
+    method: "POST",
+    headers: getAuthorizedHeaders(accessToken)
+  });
+}
+
+export async function cancelClubEvent(
+  accessToken: string,
+  clubId: string,
+  eventId: string,
+  payload: CancelClubEventRequestDto = {}
+): Promise<CancelClubEventResponseDto> {
+  return apiRequest<CancelClubEventResponseDto>(`/api/clubs/${clubId}/events/${eventId}/cancel`, {
+    method: "PATCH",
+    headers: getAuthorizedHeaders(accessToken),
+    body: JSON.stringify(payload)
+  });
+}
+
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
@@ -497,6 +772,55 @@ function buildQueryString<T extends Record<string, string | number | null | unde
   const search = params.toString();
 
   return search.length > 0 ? `?${search}` : "";
+}
+
+function normalizeClubSummary(club: ClubSummaryDto): ClubSummaryDto {
+  return {
+    ...club,
+    nearestEvent: club.nearestEvent ? normalizeClubEvent(club.nearestEvent) : null
+  };
+}
+
+function normalizeClubEvent(event: ClubEventListItemDto & Record<string, unknown>): ClubEventListItemDto {
+  const rsvpCounts = event.rsvpCounts as
+    | {
+        going?: number;
+        maybe?: number;
+        declined?: number;
+        noResponse?: number;
+        waitlist?: number;
+      }
+    | undefined;
+
+  return {
+    ...event,
+    myRsvpStatus: event.myRsvpStatus ?? null,
+    offlineRoomId:
+      event.offlineRoomId ?? (typeof event.linkedRoomId === "string" ? event.linkedRoomId : null),
+    virtualTableId:
+      event.virtualTableId ?? (typeof event.linkedTableId === "string" ? event.linkedTableId : null),
+    rsvpSummary:
+      event.rsvpSummary ??
+      (rsvpCounts
+        ? {
+            goingCount: rsvpCounts.going ?? 0,
+            maybeCount: rsvpCounts.maybe ?? 0,
+            declinedCount: rsvpCounts.declined ?? 0,
+            noResponseCount: rsvpCounts.noResponse ?? 0,
+            waitlistCount: rsvpCounts.waitlist ?? 0
+          }
+        : null)
+  };
+}
+
+function createEmptyClubRsvpGroups(): GetClubEventDetailsResponseDto["rsvpGroups"] {
+  return {
+    going: [],
+    maybe: [],
+    declined: [],
+    noResponse: [],
+    waitlist: []
+  };
 }
 
 function getAuthorizedHeaders(accessToken: string): Record<string, string> {

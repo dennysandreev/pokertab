@@ -10,84 +10,9 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <script>
-      try {
-        new Image().src = "/client-boot.gif?stage=head-start&t=" + Date.now();
-      } catch (error) {
-        // Ignore diagnostic failures.
-      }
-    </script>
     <link rel="icon" type="image/svg+xml" href="/poker-table-logo.svg" />
     <title>Poker Table</title>
     <script async src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script>
-      (function () {
-        var attempts = 0;
-        var maxAttempts = 100;
-
-        function bootBeacon(stage) {
-          try {
-            var webApp = window.Telegram && window.Telegram.WebApp;
-            var query =
-              "stage=" +
-              encodeURIComponent(stage) +
-              "&tg=" +
-              (webApp ? "1" : "0") +
-              "&version=" +
-              encodeURIComponent((webApp && webApp.version) || "") +
-              "&t=" +
-              Date.now();
-
-            new Image().src = "/client-boot.gif?" + query;
-          } catch (_error) {
-            // Ignore diagnostic failures.
-          }
-        }
-
-        function markReady() {
-          try {
-            var webApp = window.Telegram && window.Telegram.WebApp;
-
-            if (!webApp || typeof webApp.ready !== "function") {
-              return false;
-            }
-
-            webApp.ready();
-            bootBeacon("telegram-ready");
-
-            if (typeof webApp.expand === "function") {
-              webApp.expand();
-            }
-
-            return true;
-          } catch (_error) {
-            return false;
-          }
-        }
-
-        bootBeacon("inline-start");
-
-        if (markReady()) {
-          return;
-        }
-
-        var intervalId = window.setInterval(function () {
-          attempts += 1;
-
-          if (markReady() || attempts >= maxAttempts) {
-            if (attempts >= maxAttempts) {
-              bootBeacon("telegram-missing");
-            }
-
-            window.clearInterval(intervalId);
-          }
-        }, 50);
-
-        window.addEventListener("load", function () {
-          bootBeacon("window-load");
-        });
-      })();
-    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

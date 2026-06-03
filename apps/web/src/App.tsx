@@ -1,9 +1,10 @@
 import type { JSX } from "react";
 import type { Dispatch, FormEvent, PointerEvent as ReactPointerEvent, ReactNode, SetStateAction } from "react";
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type {
   GetLeaderboardResponseDto,
   GetPlayerProfileResponseDto,
+  GetVirtualTableResponseDto,
   GetRoomResponseDto,
   GetVirtualLeaderboardResponseDto,
   GetVirtualPlayerProfileResponseDto,
@@ -17,14 +18,17 @@ import { chipsToMoneyMinor, formatChips, formatChipsWithCurrencyApprox, formatMi
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { NavigateFunction } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { CompactGameRow } from "@/components/visual";
 import {
   ApiRequestError,
   cancelRebuy,
   closeSettlement,
   createRebuy,
   createRoom,
+  getClubEvents,
   getLeaderboard,
   getPlayerProfile,
+  getVirtualTable,
   getVirtualLeaderboard,
   getVirtualPlayerProfile,
   getRebuyHistory,
@@ -33,11 +37,14 @@ import {
   joinRoom,
   leaveRoom,
   previewSettlement,
+  resolveInviteCode,
   returnToRoom,
   startRoom
 } from "@/lib/api";
+import { sendClientBootBeacon } from "@/lib/client-boot";
 import {
   canUseBrowserBack,
+  getClubInviteCodeFromStartParam,
   getTelegramBackFallbackPath,
   getVirtualInviteCodeFromStartParam,
   hideTelegramBackButton,
@@ -52,6 +59,27 @@ import {
   ROOM_TITLE_MAX_LENGTH,
   type CreateRoomFormValues
 } from "./features/rooms/room-form";
+import { ClubsProvider, useClubsList } from "./features/clubs/club-data";
+import { ClubEventPreviewCard } from "./features/clubs/club-event-preview";
+import { useUpcomingClubEvents, type ClubHomeEventItem } from "./features/clubs/club-home-events";
+import { ClubSchedulingSection } from "./features/clubs/club-form";
+import type { ClubEventListItemDto } from "./features/clubs/types";
+import {
+  ClubDashboardContainer,
+  ClubEventDetailsContainer,
+  ClubInviteContainer,
+  ClubsHomeContainer,
+  CreateClubContainer,
+  JoinClubContainer
+} from "./features/clubs/club-containers";
+import {
+  getClubDashboardRoute,
+  getClubEventRoute,
+  getClubInviteRoute,
+  getClubJoinRoute,
+  getClubsNewRoute,
+  isClubRoutePath
+} from "./features/clubs/routes";
 import {
   DEFAULT_LEADERBOARD_QUERY,
   formatPercentFromBps,
@@ -61,6 +89,14 @@ import {
   LEADERBOARD_PERIOD_OPTIONS,
   LEADERBOARD_SCOPE_OPTIONS
 } from "./features/leaderboard/leaderboard-view";
+import {
+  buildHomeViewModel,
+  getPrimaryActiveTurn,
+  type HomeClubEvent,
+  type HomeActiveTableCard,
+  type HomeTarget
+} from "./features/home/home-view";
+import { resolveMiniAppVisual } from "./features/visual/mini-app-visuals";
 import {
   ActiveRoomAdmin,
   ActiveRoomPlayer,
@@ -104,7 +140,7 @@ import {
   VirtualTableContainer,
   VirtualTableHistoryContainer
 } from "./features/virtual/virtual-containers";
-import { VirtualTablesProvider } from "./features/virtual/virtual-data";
+import { VirtualTablesProvider, useVirtualTablesList } from "./features/virtual/virtual-data";
 import {
   getCreateVirtualTableRoute,
   getJoinVirtualTableInviteRoute,
@@ -187,7 +223,8 @@ type RoomsListContextValue = {
 
 const cardClassName = "glass-card rounded-2xl bg-card p-4 shadow-panel";
 const mutedCardClassName = "glass-card rounded-2xl bg-white/[0.02] p-4";
-const modeToggleClassName = "rounded-2xl border border-white/8 bg-white/[0.025] p-1.5";
+const modeToggleClassName =
+  "rounded-2xl bg-[linear-gradient(180deg,rgba(17,28,24,0.9),rgba(11,17,14,0.96))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
 const inputClassName =
   "mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-surfaceHigher px-4 text-sm text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 const labelClassName = "text-sm font-medium text-foreground";
@@ -206,9 +243,11 @@ const pokerTableLogoPath = "/poker-table-logo.svg";
 export default function App(): JSX.Element {
   return (
     <RoomsListProvider>
-      <VirtualTablesProvider>
-        <AppShell />
-      </VirtualTablesProvider>
+      <ClubsProvider>
+        <VirtualTablesProvider>
+          <AppShell />
+        </VirtualTablesProvider>
+      </ClubsProvider>
     </RoomsListProvider>
   );
 }
@@ -225,8 +264,14 @@ function AppShell(): JSX.Element {
   const splashStartedAtRef = useRef(Date.now());
   const [showSplash, setShowSplash] = useState(true);
   const canSwipeBack = location.pathname !== getHomeRoute();
-  const isJoinRoute = isJoinRoutePath(location.pathname);
-  const isVirtualTableFullscreen = isVirtualTableFullscreenRoute(location.pathname);
+  const isCompactJoinRoute = isCompactJoinRoutePath(location.pathname);
+  const { virtualTablesState } = useVirtualTablesList();
+  const virtualTableRouteId = getVirtualTableRouteId(location.pathname);
+  const virtualTableListItem = virtualTableRouteId
+    ? virtualTablesState.data?.items.find((table) => table.id === virtualTableRouteId)
+    : null;
+  const isVirtualTableFullscreen =
+    virtualTableListItem?.status === "ACTIVE" || virtualTableListItem?.status === "PAUSED";
 
   useEffect(() => {
     const maxDurationTimeoutId = window.setTimeout(
@@ -322,7 +367,7 @@ function AppShell(): JSX.Element {
           paddingTop: isVirtualTableFullscreen ? "0" : appMainTopPadding,
           paddingBottom: isVirtualTableFullscreen
             ? "0"
-            : isJoinRoute
+            : isCompactJoinRoute
               ? "calc(env(safe-area-inset-bottom) + 1.5rem)"
               : "calc(env(safe-area-inset-bottom) + 6.5rem)",
           minHeight: "100dvh",
@@ -332,7 +377,13 @@ function AppShell(): JSX.Element {
         <Routes>
           <Route path={getHomeRoute()} element={<HomeScreen />} />
           <Route path={getGamesRoute()} element={<GamesScreen />} />
-          <Route path={getClubRoute()} element={<ClubScreen />} />
+          <Route path={getClubRoute()} element={<ClubsHomeContainer />} />
+          <Route path="/clubs" element={<ClubsHomeContainer />} />
+          <Route path={getClubsNewRoute()} element={<CreateClubContainer />} />
+          <Route path="/clubs/join/:inviteCode" element={<JoinClubContainer />} />
+          <Route path={getClubDashboardRoute(":clubId")} element={<ClubDashboardContainer />} />
+          <Route path={getClubInviteRoute(":clubId")} element={<ClubInviteContainer />} />
+          <Route path={getClubEventRoute(":clubId", ":eventId")} element={<ClubEventDetailsContainer />} />
           <Route path={getVirtualLobbyRoute()} element={<VirtualLobbyContainer />} />
           <Route path={getCreateVirtualTableRoute()} element={<CreateVirtualTableContainer />} />
           <Route path={getJoinVirtualTableRoute()} element={<JoinVirtualTableContainer />} />
@@ -351,7 +402,7 @@ function AppShell(): JSX.Element {
           <Route path="*" element={<Navigate to={getHomeRoute()} replace />} />
         </Routes>
       </main>
-      {isJoinRoute || isVirtualTableFullscreen ? null : <BottomNav />}
+      {isCompactJoinRoute || isVirtualTableFullscreen ? null : <BottomNav />}
       <AppSplashScreen visible={showSplash} />
     </div>
   );
@@ -496,6 +547,7 @@ function LaunchInviteRedirect(): JSX.Element | null {
   const location = useLocation();
   const navigate = useNavigate();
   const virtualInviteCode = getVirtualInviteCodeFromStartParam(state.startParam);
+  const clubInviteCode = getClubInviteCodeFromStartParam(state.startParam);
 
   useEffect(() => {
     if (location.pathname !== getHomeRoute() || state.status !== "authenticated") {
@@ -507,10 +559,15 @@ function LaunchInviteRedirect(): JSX.Element | null {
       return;
     }
 
+    if (clubInviteCode) {
+      void navigate(`/clubs/join/${clubInviteCode}`, { replace: true });
+      return;
+    }
+
     if (state.inviteCode) {
       void navigate(getJoinRoomRoute(state.inviteCode), { replace: true });
     }
-  }, [location.pathname, navigate, state.inviteCode, state.status, virtualInviteCode]);
+  }, [clubInviteCode, location.pathname, navigate, state.inviteCode, state.status, virtualInviteCode]);
 
   return null;
 }
@@ -544,39 +601,28 @@ function TelegramBackButtonSync(): JSX.Element | null {
 function AppChrome(): JSX.Element {
   const location = useLocation();
   const isHome = location.pathname === getHomeRoute();
-  const isLeaderboard = location.pathname === getLeaderboardRoute();
-  const [isPokerScoreInfoOpen, setIsPokerScoreInfoOpen] = useState(false);
+  const isBrandHeader = isHome || isBrandHeaderRoute(location.pathname);
   const title =
-    isLeaderboard
-      ? "Лидерборд"
-      : isHome
+    isBrandHeader
         ? "Poker Table"
         : getChromeSubtitle(location.pathname);
 
   return (
-    <>
-      <header
-        className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[#141313]/88 backdrop-blur-xl"
-        style={{ paddingTop: appHeaderTopPadding }}
-      >
-        <div className="flex h-[4.5rem] w-full items-center justify-center px-4 text-center">
-          {isHome ? (
-            <div className="flex min-w-0 items-center justify-center gap-3">
-              <PokerTableLogo className="h-10 w-10 shrink-0" />
-              <p className="truncate font-display text-[1.95rem] font-semibold leading-none text-white">{title}</p>
-            </div>
-          ) : (
-            <div className="flex min-w-0 items-center justify-center gap-2">
-              <p className="truncate text-[1.15rem] font-semibold text-white">{title}</p>
-              {isLeaderboard ? (
-                <InfoIconButton label="Что такое Poker Score" onClick={() => setIsPokerScoreInfoOpen(true)} />
-              ) : null}
-            </div>
-          )}
-        </div>
-      </header>
-      <PokerScoreInfoModal open={isPokerScoreInfoOpen} onOpenChange={setIsPokerScoreInfoOpen} />
-    </>
+    <header
+      className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[#141313]/88 backdrop-blur-xl"
+      style={{ paddingTop: appHeaderTopPadding }}
+    >
+      <div className="flex h-[4.5rem] w-full items-center justify-center px-4 text-center">
+        {isBrandHeader ? (
+          <div className="flex min-w-0 items-center justify-center gap-3">
+            <PokerTableLogo className="h-10 w-10 shrink-0" />
+            <p className="truncate font-display text-[1.95rem] font-semibold leading-none text-white">{title}</p>
+          </div>
+        ) : (
+          <p className="truncate text-[1.15rem] font-semibold text-white">{title}</p>
+        )}
+      </div>
+    </header>
   );
 }
 
@@ -597,7 +643,7 @@ function BottomNav(): JSX.Element {
       label: "Клуб",
       icon: "groups",
       href: getClubRoute(),
-      active: location.pathname === getClubRoute()
+      active: isClubRoutePath(location.pathname)
     },
     {
       label: "Рейтинг",
@@ -644,21 +690,851 @@ function BottomNav(): JSX.Element {
 
 function HomeScreen(): JSX.Element {
   const { state } = useSession();
+  const navigate = useNavigate();
+  const { virtualTablesState } = useVirtualTablesList();
+  const { clubsState } = useClubsList();
+  const { roomsState } = useRoomsList();
+  const [profileState, setProfileState] = useState<LoadState<GetPlayerProfileResponseDto>>({
+    status: "idle",
+    data: null,
+    errorMessage: null
+  });
+  const [clubEventsState, setClubEventsState] = useState<LoadState<HomeClubEvent[]>>({
+    status: "idle",
+    data: null,
+    errorMessage: null
+  });
+  const [activeTurnDetailState, setActiveTurnDetailState] = useState<{
+    tableId: string | null;
+    data: GetVirtualTableResponseDto | null;
+  }>({
+    tableId: null,
+    data: null
+  });
+  const [homeJoinCode, setHomeJoinCode] = useState("");
+  const [homeJoinState, setHomeJoinState] = useState({
+    isSubmitting: false,
+    errorMessage: null as string | null
+  });
+  const user = state.session?.user ?? null;
+  const tables = virtualTablesState.data?.items ?? [];
+  const activeRooms = roomsState.data?.active ?? [];
+  const recentRooms = roomsState.data?.recent ?? [];
+  const clubs = useMemo(() => clubsState.data?.clubs ?? [], [clubsState.data]);
+  const primaryActiveTurn = useMemo(() => getPrimaryActiveTurn(tables), [tables]);
+
+  useEffect(() => {
+    sendClientBootBeacon("home-mounted");
+  }, []);
+
+  useEffect(() => {
+    sendClientBootBeacon(`session-${state.status}`);
+  }, [state.status]);
+
+  useEffect(() => {
+    if (!state.accessToken || !user?.id) {
+      setProfileState({
+        status: "idle",
+        data: null,
+        errorMessage: null
+      });
+      return;
+    }
+
+    let isCancelled = false;
+
+    setProfileState({
+      status: "loading",
+      data: null,
+      errorMessage: null
+    });
+
+    void getPlayerProfile(state.accessToken, user.id)
+      .then((data) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileState({
+          status: "ready",
+          data,
+          errorMessage: null
+        });
+      })
+      .catch((error: unknown) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileState({
+          status: "error",
+          data: null,
+          errorMessage: getErrorMessage(error, "Не получилось обновить Poker Score")
+        });
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [state.accessToken, user?.id]);
+
+  useEffect(() => {
+    const accessToken = state.accessToken;
+
+    if (!accessToken) {
+      setClubEventsState({
+        status: "idle",
+        data: null,
+        errorMessage: null
+      });
+      return;
+    }
+
+    if (clubsState.status === "loading" || clubsState.status === "idle") {
+      setClubEventsState((current) => ({
+        status: "loading",
+        data: current.data,
+        errorMessage: null
+      }));
+      return;
+    }
+
+    if (clubs.length === 0) {
+      setClubEventsState({
+        status: "ready",
+        data: [],
+        errorMessage: null
+      });
+      return;
+    }
+
+    let isCancelled = false;
+
+    setClubEventsState((current) => ({
+      status: "loading",
+      data: current.data,
+      errorMessage: null
+    }));
+
+    void Promise.all(
+      clubs.map(async (club) => {
+        const data = await getClubEvents(accessToken, club.id, {
+          status: "upcoming",
+          type: "all"
+        });
+
+        return data.events.map((event) => ({
+          ...event,
+          clubName: club.name
+        }));
+      })
+    )
+      .then((eventsByClub) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setClubEventsState({
+          status: "ready",
+          data: eventsByClub.flat(),
+          errorMessage: null
+        });
+      })
+      .catch((error: unknown) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setClubEventsState((current) => ({
+          status: "error",
+          data: current.data,
+          errorMessage: getErrorMessage(error, "Не получилось загрузить события")
+        }));
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [clubs, clubsState.status, state.accessToken]);
+
+  useEffect(() => {
+    if (!state.accessToken || !primaryActiveTurn) {
+      setActiveTurnDetailState({
+        tableId: null,
+        data: null
+      });
+      return;
+    }
+
+    let isCancelled = false;
+
+    setActiveTurnDetailState((current) =>
+      current.tableId === primaryActiveTurn.id
+        ? current
+        : {
+            tableId: primaryActiveTurn.id,
+            data: null
+          }
+    );
+
+    void getVirtualTable(state.accessToken, primaryActiveTurn.id)
+      .then((data) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setActiveTurnDetailState({
+          tableId: primaryActiveTurn.id,
+          data
+        });
+      })
+      .catch(() => {
+        if (isCancelled) {
+          return;
+        }
+
+        setActiveTurnDetailState({
+          tableId: primaryActiveTurn.id,
+          data: null
+        });
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [primaryActiveTurn, state.accessToken]);
+
+  const model = useMemo(
+    () =>
+      buildHomeViewModel({
+        activeRooms,
+        recentRooms,
+        tables,
+        events: clubEventsState.data ?? [],
+        offlinePokerScore: profileState.data?.stats.pokerScore,
+        offlineGamesCount: profileState.data?.stats.gamesCount,
+        onlinePokerScore: profileState.data?.onlineStats.onlinePokerScore,
+        onlineHandsPlayed: profileState.data?.onlineStats.handsPlayed,
+        activeTurnDetail:
+          activeTurnDetailState.tableId === primaryActiveTurn?.id ? activeTurnDetailState.data : null
+      }),
+    [
+      activeRooms,
+      activeTurnDetailState,
+      clubEventsState.data,
+      primaryActiveTurn?.id,
+      profileState.data?.onlineStats.handsPlayed,
+      profileState.data?.onlineStats.onlinePokerScore,
+      profileState.data?.stats.gamesCount,
+      profileState.data?.stats.pokerScore,
+      recentRooms,
+      tables
+    ]
+  );
+  const errorMessage =
+    roomsState.status === "error"
+      ? roomsState.errorMessage
+      : virtualTablesState.status === "error"
+      ? virtualTablesState.errorMessage
+      : profileState.status === "error"
+        ? profileState.errorMessage
+        : clubEventsState.status === "error"
+          ? clubEventsState.errorMessage
+          : null;
+
+  const handleHomeJoinSubmit = useCallback(async (): Promise<void> => {
+    const inviteCode = normalizeInviteCode(homeJoinCode);
+
+    if (inviteCode.length === 0 || !state.accessToken) {
+      setHomeJoinState({
+        isSubmitting: false,
+        errorMessage: inviteCode.length === 0 ? "Введите код приглашения" : "Откройте приложение через Telegram"
+      });
+      return;
+    }
+
+    setHomeJoinState({
+      isSubmitting: true,
+      errorMessage: null
+    });
+
+    try {
+      const result = await resolveInviteCode(state.accessToken, { inviteCode });
+
+      if (result.kind === "ROOM") {
+        void navigate(getJoinRoomRoute(result.inviteCode));
+      } else if (result.kind === "VIRTUAL_TABLE") {
+        void navigate(getJoinVirtualTableInviteRoute(result.inviteCode));
+      } else {
+        void navigate(getClubJoinRoute(result.inviteCode));
+      }
+    } catch (error) {
+      setHomeJoinState({
+        isSubmitting: false,
+        errorMessage:
+          error instanceof ApiRequestError && error.status === 409
+            ? "Код совпал с несколькими приглашениями. Попросите новый код."
+            : getErrorMessage(error, "Код не найден")
+      });
+    }
+  }, [homeJoinCode, navigate, state.accessToken]);
 
   return (
-    <ScreenLayout banner={getSessionBanner(state.status, state.errorMessage)}>{null}</ScreenLayout>
+    <>
+      {getSessionBanner(state.status, state.errorMessage)}
+      <HomeScreenContent
+        errorMessage={errorMessage}
+        inviteCode={homeJoinCode}
+        inviteErrorMessage={homeJoinState.errorMessage}
+        isInviteSubmitting={homeJoinState.isSubmitting}
+        model={model}
+        onInviteCodeChange={setHomeJoinCode}
+        onInviteSubmit={() => void handleHomeJoinSubmit()}
+        onOpenTarget={(target) => void navigate(getHomeTargetRoute(target))}
+        profileRoute={state.session?.user.id ? getPlayerRoute(state.session.user.id) : null}
+      />
+    </>
+  );
+}
+
+export function HomeScreenContent({
+  model,
+  errorMessage,
+  inviteCode,
+  inviteErrorMessage,
+  isInviteSubmitting,
+  onInviteCodeChange,
+  onInviteSubmit,
+  onOpenTarget,
+  profileRoute
+}: {
+  model: ReturnType<typeof buildHomeViewModel>;
+  errorMessage: string | null;
+  inviteCode: string;
+  inviteErrorMessage: string | null;
+  isInviteSubmitting: boolean;
+  onInviteCodeChange: (value: string) => void;
+  onInviteSubmit: () => void;
+  onOpenTarget: (target: HomeTarget) => void;
+  profileRoute: string | null;
+}): JSX.Element {
+  return (
+    <div className="space-y-5">
+      <HomePokerScoreSection
+        profileRoute={profileRoute}
+        progress={model.pokerScore.progress}
+        score={model.pokerScore.value}
+      />
+      <HomeJoinCodeSection
+        errorMessage={inviteErrorMessage}
+        inviteCode={inviteCode}
+        isSubmitting={isInviteSubmitting}
+        onChange={onInviteCodeChange}
+        onSubmit={onInviteSubmit}
+      />
+      <HomeMiniCalendar calendarStartAt={model.calendarStartAt} events={model.upcomingEvents} onOpenTarget={onOpenTarget} />
+      <HomeActiveNowSection cards={model.activeTables} errorMessage={errorMessage} onOpenTarget={onOpenTarget} />
+      <HomeEventsSection events={model.upcomingEvents} />
+    </div>
+  );
+}
+
+export function HomePokerScoreSection({
+  score,
+  progress,
+  profileRoute
+}: {
+  score: number | null;
+  progress: number;
+  profileRoute: string | null;
+}): JSX.Element {
+  const content = (
+    <section className="glass-card rounded-2xl bg-white/[0.025] p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#93a099]">Poker Score</p>
+          <p className="mt-1 text-sm text-muted">Офлайн и онлайн</p>
+        </div>
+        <div className="text-right">
+          <p className="font-display text-[2rem] font-semibold leading-none text-accent">{score == null ? "—" : score}</p>
+          <p className="mt-1 text-xs font-semibold text-muted">{score == null ? "Пока без оценки" : `${progress}%`}</p>
+        </div>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/12">
+        <div
+          className="h-full rounded-full bg-accent shadow-[0_0_18px_rgba(78,222,163,0.55)] transition-all"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </section>
+  );
+
+  const scoreCard = !profileRoute ? (
+    content
+  ) : (
+    <Link className="block" to={profileRoute}>
+      {content}
+    </Link>
+  );
+
+  return scoreCard;
+}
+
+function HomeJoinCodeSection({
+  inviteCode,
+  errorMessage,
+  isSubmitting,
+  onChange,
+  onSubmit
+}: {
+  inviteCode: string;
+  errorMessage: string | null;
+  isSubmitting: boolean;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+}): JSX.Element {
+  const normalizedInviteCode = normalizeInviteCode(inviteCode);
+
+  return (
+    <section className="relative overflow-hidden rounded-2xl bg-[linear-gradient(135deg,rgba(78,222,163,0.16),rgba(20,25,22,0.98)_48%,rgba(12,14,13,0.98))] p-3 shadow-[0_16px_34px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)]">
+      <div className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-[#4edea3]/12 blur-2xl" />
+      <div className="mb-3 flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0f2419] text-[#4edea3] shadow-[inset_0_0_0_1px_rgba(78,222,163,0.28)]">
+          <MaterialIcon icon="mail" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white">Введите код приглашения</p>
+          <p className="mt-0.5 text-xs font-medium text-[#a8b0ab]">Откроем комнату, онлайн-стол или клуб</p>
+        </div>
+      </div>
+      <div className="relative flex items-center gap-2">
+        <input
+          aria-label="Код приглашения"
+          className="min-h-11 min-w-0 flex-1 rounded-xl border border-[#4edea3]/14 bg-[#101512]/90 px-3 text-center text-sm font-semibold uppercase tracking-[0.16em] text-white outline-none transition placeholder:text-[#89918c] focus:border-[#56df9d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#56df9d]"
+          maxLength={16}
+          placeholder="AB12CD34"
+          value={inviteCode}
+          onChange={(event) => onChange(normalizeInviteCode(event.target.value))}
+        />
+        <Button
+          className="min-h-11 shrink-0 rounded-xl bg-[#4edea3] px-4 text-[#04130d] shadow-none hover:bg-[#67edb3]"
+          disabled={isSubmitting || normalizedInviteCode.length === 0}
+          onClick={onSubmit}
+        >
+          {isSubmitting ? "Ищем" : "Войти"}
+        </Button>
+      </div>
+      {errorMessage ? <p className="mt-2 px-1 text-sm font-medium text-[#ffb4a8]">{errorMessage}</p> : null}
+    </section>
+  );
+}
+
+function HomeMiniCalendar({
+  calendarStartAt,
+  events,
+  onOpenTarget
+}: {
+  calendarStartAt: string;
+  events: HomeClubEvent[];
+  onOpenTarget: (target: HomeTarget) => void;
+}): JSX.Element {
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const parsedStart = new Date(calendarStartAt);
+  const today = startOfDay(Number.isFinite(parsedStart.getTime()) ? parsedStart : new Date());
+  const days = Array.from({ length: 14 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() + index);
+    return date;
+  });
+  const eventsByDay = new Map<string, HomeClubEvent[]>();
+
+  events.forEach((event) => {
+    const date = new Date(event.scheduledStartAt);
+    if (!Number.isFinite(date.getTime())) {
+      return;
+    }
+    const key = getCalendarDayKey(date);
+    eventsByDay.set(key, [...(eventsByDay.get(key) ?? []), event]);
+  });
+  const selectedEvents = selectedDayKey ? eventsByDay.get(selectedDayKey) ?? [] : [];
+
+  return (
+    <section className="rounded-2xl bg-white/[0.025] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#93a099]">Календарь</p>
+        <p className="text-xs font-medium text-muted">Ближайшие события</p>
+      </div>
+      <div className="mt-3 grid grid-cols-7 gap-1.5">
+        {days.map((day, index) => {
+          const key = getCalendarDayKey(day);
+          const dayEvents = eventsByDay.get(key) ?? [];
+          const isToday = index === 0;
+          const isSelected = selectedDayKey === key;
+
+          return (
+            <button
+              key={key}
+              className={cn(
+                "flex min-h-[3.65rem] flex-col items-center justify-center rounded-xl text-center transition",
+                isToday ? "bg-accent/14 text-white" : "bg-white/[0.035] text-white/78",
+                isSelected && "bg-accent/20 shadow-[inset_0_0_0_1px_rgba(78,222,163,0.24)]",
+                "hover:bg-accent/12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              )}
+              type="button"
+              onClick={() => setSelectedDayKey((current) => (current === key ? null : key))}
+            >
+              <span className="text-[0.62rem] font-semibold uppercase text-muted">
+                {day.toLocaleDateString("ru-RU", { weekday: "short" }).replace(".", "")}
+              </span>
+              <span className="mt-1 text-sm font-semibold">{day.toLocaleDateString("ru-RU", { day: "2-digit" })}</span>
+              <span className="mt-1 flex h-2 items-center justify-center gap-0.5">
+                {dayEvents.slice(0, 3).map((event) => (
+                  <span key={event.id} className="h-1.5 w-1.5 rounded-full bg-accent" />
+                ))}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {selectedDayKey ? (
+        <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-2">
+          {selectedEvents.length === 0 ? (
+            <p className="px-2 py-2 text-sm text-[#a8b0ab]">На этот день игр нет</p>
+          ) : (
+            selectedEvents.map((event) => (
+              <button
+                key={event.id}
+                className="flex w-full items-center justify-between gap-3 rounded-lg bg-white/[0.035] px-3 py-2 text-left transition hover:bg-white/[0.06]"
+                type="button"
+                onClick={() => onOpenTarget({ kind: "event", clubId: event.clubId, eventId: event.id })}
+              >
+                <span className="min-w-0 truncate text-sm font-semibold text-white">{event.title}</span>
+                <span className="shrink-0 text-xs text-[#a8b0ab]">
+                  {new Date(event.scheduledStartAt).toLocaleTimeString("ru-RU", {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  })}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function startOfDay(value: Date): Date {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function getCalendarDayKey(value: Date): string {
+  const date = startOfDay(value);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+export function HomeActiveNowSection({
+  cards,
+  errorMessage,
+  onOpenTarget
+}: {
+  cards: HomeActiveTableCard[];
+  errorMessage: string | null;
+  onOpenTarget: (target: HomeTarget) => void;
+}): JSX.Element {
+  return (
+    <section className="space-y-3">
+      <HomeSectionTitle title="Активные сейчас" />
+      {errorMessage ? (
+        <div className="rounded-2xl border border-amber-200/20 bg-amber-200/8 px-4 py-3 text-sm font-medium text-amber-100">
+          {errorMessage}
+        </div>
+      ) : null}
+      {cards.length === 0 ? (
+        <CompactEmptyState
+          description="Как только игра начнётся, она появится здесь."
+          imageAlt="Нет активных игр"
+          imageSrc={resolveMiniAppVisual("empty-state")}
+          title="Активных столов нет"
+          tone="graphite"
+        />
+      ) : (
+        <div className="space-y-2.5">
+          {cards.slice(0, 4).map((card) => (
+            <CompactGameRow
+              key={card.id}
+              className={cn(card.isUserTurn && "rounded-[22px] bg-[#56df9d]/[0.035] ring-1 ring-inset ring-[#56df9d]/70")}
+              detail={card.meta}
+              imageAlt={card.typeLabel === "Онлайн" ? "Онлайн стол" : "Оффлайн стол"}
+              imageSrc={resolveMiniAppVisual(card.typeLabel === "Онлайн" ? "online" : "offline")}
+              onClick={() => onOpenTarget(card.target)}
+              statusLabel={`${card.typeLabel} · ${card.statusLabel}`}
+              statusTone={card.isUserTurn ? "success" : "neutral"}
+              title={card.title}
+              trailing={
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold",
+                    card.isUserTurn ? "bg-[#56df9d]/12 text-[#9af2c2]" : "text-accent"
+                  )}
+                >
+                  Открыть
+                </span>
+              }
+              type="button"
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HomeEventsSection({ events }: { events: HomeClubEvent[] }): JSX.Element {
+  return (
+    <section className="space-y-4">
+      <HomeSectionTitle title="Ближайшие события" />
+      {events.length === 0 ? (
+        <CompactEmptyState
+          description="Когда появятся новые встречи, покажем их здесь."
+          imageAlt="Нет событий"
+          imageSrc={resolveMiniAppVisual("club")}
+          title="Событий пока нет"
+          tone="amber"
+        />
+      ) : (
+        <div className="space-y-3">
+          {events.slice(0, 4).map((event) => (
+            <Link key={`${event.clubId}-${event.id}`} to={getClubEventRoute(event.clubId, event.id)}>
+              <article className="glass-card rounded-2xl bg-white/[0.025] p-3 transition hover:bg-white/[0.04]">
+                <div className="flex items-center gap-3">
+                  <HomeEventDateBadge value={event.scheduledStartAt} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-amber-100">
+                      {getHomeEventTypeLabel(event.type)} · {formatHomeEventTime(event.scheduledStartAt)}
+                    </p>
+                    <h3 className="mt-1 truncate text-base font-semibold text-white">{event.title}</h3>
+                    <p className="mt-1 truncate text-sm text-muted">{event.clubName}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-white/70">
+                    {getHomeRsvpLabel(event.myRsvpStatus ?? null)}
+                  </span>
+                </div>
+              </article>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HomeEventDateBadge({ value }: { value: string }): JSX.Element {
+  const date = new Date(value);
+  const weekday = Number.isFinite(date.getTime())
+    ? date.toLocaleDateString("ru-RU", { weekday: "short" }).replace(".", "")
+    : "";
+  const day = Number.isFinite(date.getTime()) ? date.toLocaleDateString("ru-RU", { day: "2-digit" }) : "—";
+
+  return (
+    <div className="flex h-[4.25rem] w-[4.25rem] shrink-0 flex-col items-center justify-center rounded-xl bg-white/14 text-center">
+      <p className="text-[0.68rem] font-semibold uppercase text-white/70">{weekday}</p>
+      <p className="mt-1 text-[1.45rem] font-semibold leading-none text-white">{day}</p>
+    </div>
+  );
+}
+
+function HomeSectionTitle({ title }: { title: string }): JSX.Element {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="text-[1.55rem] font-semibold leading-tight text-white">{title}</h2>
+      {title === "Активные сейчас" ? <span className="h-2.5 w-2.5 rounded-full bg-accent" /> : null}
+    </div>
+  );
+}
+
+function CompactVisualAccent({
+  imageSrc,
+  imageAlt,
+  tone = "graphite",
+  className
+}: {
+  imageSrc?: string | undefined;
+  imageAlt?: string | undefined;
+  tone?: "emerald" | "amber" | "graphite";
+  className?: string;
+}): JSX.Element {
+  return (
+    <span
+      className={cn(
+        "relative flex h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-white/[0.06]",
+        tone === "emerald" && "shadow-[inset_0_0_0_1px_rgba(78,222,163,0.22)]",
+        tone === "amber" && "shadow-[inset_0_0_0_1px_rgba(255,190,82,0.22)]",
+        tone === "graphite" && "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]",
+        className
+      )}
+    >
+      {imageSrc ? <img alt={imageAlt ?? ""} className="h-full w-full object-cover opacity-85" src={imageSrc} /> : null}
+      <span className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.16),transparent_52%,rgba(0,0,0,0.22))]" />
+    </span>
+  );
+}
+
+function CompactEmptyState({
+  title,
+  description,
+  imageSrc,
+  imageAlt,
+  tone = "graphite"
+}: {
+  title: string;
+  description: string;
+  imageSrc?: string | undefined;
+  imageAlt?: string | undefined;
+  tone?: "emerald" | "amber" | "graphite";
+}): JSX.Element {
+  return (
+    <section className="glass-card rounded-2xl bg-white/[0.025] p-3">
+      <div className="flex items-center gap-3">
+        <CompactVisualAccent imageAlt={imageAlt} imageSrc={imageSrc} tone={tone} />
+        <div className="min-w-0">
+          <p className="font-semibold text-white">{title}</p>
+          <p className="mt-1 text-sm leading-5 text-muted">{description}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CompactPanel({
+  title,
+  description,
+  action,
+  children,
+  className
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}): JSX.Element {
+  return (
+    <section className={cn("glass-card rounded-2xl bg-white/[0.025] p-4", className)}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
+          {description ? <p className="mt-1 text-sm leading-5 text-muted">{description}</p> : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function CompactFormShell({
+  title,
+  eyebrow,
+  imageSrc,
+  imageAlt,
+  footer,
+  headerAside,
+  children,
+  tone = "graphite"
+}: {
+  title: string;
+  eyebrow?: string;
+  imageSrc?: string | undefined;
+  imageAlt?: string | undefined;
+  footer?: ReactNode;
+  headerAside?: ReactNode;
+  children: ReactNode;
+  tone?: "emerald" | "amber" | "graphite";
+}): JSX.Element {
+  return (
+    <section className="space-y-4">
+      <header className="glass-card rounded-2xl bg-card p-4">
+        <div className="flex items-center gap-3">
+          {headerAside ?? <CompactVisualAccent imageAlt={imageAlt} imageSrc={imageSrc} tone={tone} />}
+          <div className="min-w-0">
+            {eyebrow ? <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#93a099]">{eyebrow}</p> : null}
+            <h1 className="mt-1 text-[1.45rem] font-semibold leading-tight text-white">{title}</h1>
+          </div>
+        </div>
+      </header>
+      {children}
+      {footer ? <div>{footer}</div> : null}
+    </section>
   );
 }
 
 function GamesScreen(): JSX.Element {
   const { state } = useSession();
+  const navigate = useNavigate();
   const { roomsState, refreshRooms } = useRoomsList();
+  const offlineEventsState = useUpcomingClubEvents("OFFLINE_POKER");
   const activeRooms = roomsState.data?.active ?? [];
   const recentRooms = roomsState.data?.recent ?? [];
+  const nearestOfflineEvent = offlineEventsState.events[0] ?? null;
 
   return (
     <ScreenLayout>
-      <OfflineQuickActions inviteCode={state.inviteCode} />
+      <GamesScreenContent
+        activeRooms={activeRooms}
+        inviteCode={state.inviteCode}
+        nearestEvent={nearestOfflineEvent}
+        onCreateRoom={() => void navigate(getCreateRoomRoute())}
+        onJoinCodeSubmit={(inviteCode) => void navigate(getJoinRoomRoute(inviteCode))}
+        onOpenInvite={state.inviteCode ? () => void navigate(getJoinRoomRoute(state.inviteCode!)) : null}
+        onOpenNearestEvent={(clubId, eventId) => void navigate(getClubEventRoute(clubId, eventId))}
+        onOpenRecentRoom={(roomId) => void navigate(getRoomRoute(roomId))}
+        onOpenRoom={(roomId) => void navigate(getRoomRoute(roomId))}
+        onRefresh={() => void refreshRooms()}
+        recentRooms={recentRooms}
+        roomsState={roomsState}
+      />
+    </ScreenLayout>
+  );
+}
+
+export function GamesScreenContent({
+  activeRooms,
+  recentRooms,
+  roomsState,
+  inviteCode,
+  nearestEvent,
+  onCreateRoom,
+  onJoinCodeSubmit,
+  onOpenInvite,
+  onOpenNearestEvent,
+  onOpenRoom,
+  onOpenRecentRoom,
+  onRefresh
+}: {
+  activeRooms: RoomsListResponseDto["active"];
+  recentRooms: RoomsListResponseDto["recent"];
+  roomsState: LoadState<RoomsListResponseDto>;
+  inviteCode: string | null;
+  nearestEvent?: ClubHomeEventItem | null;
+  onCreateRoom: () => void;
+  onJoinCodeSubmit: (inviteCode: string) => void;
+  onOpenInvite: (() => void) | null;
+  onOpenNearestEvent?: (clubId: string, eventId: string) => void;
+  onOpenRoom: (roomId: string) => void;
+  onOpenRecentRoom: (roomId: string) => void;
+  onRefresh: () => void;
+}): JSX.Element {
+  return (
+    <>
+      <OfflineActionHero
+        hasInvite={Boolean(inviteCode)}
+        onCreateRoom={onCreateRoom}
+        onJoinCodeSubmit={onJoinCodeSubmit}
+        onOpenInvite={onOpenInvite}
+      />
 
       {roomsState.status === "loading" ? (
         <InfoCard title="Загружаем игры" description="Собираем ваши активные и последние столы." />
@@ -667,49 +1543,48 @@ function GamesScreen(): JSX.Element {
       {roomsState.status === "error" ? (
         <div className="space-y-3">
           <InfoCard title="Пока не получилось" description={roomsState.errorMessage} />
-          <Button className={cn("w-full", secondaryButtonClassName)} onClick={() => void refreshRooms()}>
+          <Button className={cn("w-full", secondaryButtonClassName)} onClick={onRefresh}>
             Попробовать снова
           </Button>
         </div>
       ) : null}
 
+      {nearestEvent && onOpenNearestEvent ? (
+        <section className="space-y-3">
+          <ClubEventPreviewCard
+            item={nearestEvent}
+            title="Ближайшая игра"
+            onClick={() => onOpenNearestEvent(nearestEvent.club.id, nearestEvent.event.id)}
+          />
+        </section>
+      ) : null}
+
       <section className="space-y-3">
+        <div>
+          <h2 className="text-[1.15rem] font-semibold leading-tight text-white">Активные игры</h2>
+        </div>
         {roomsState.status !== "loading" && activeRooms.length === 0 ? (
-          <InfoCard title="Пока пусто" description="Создайте новый стол или откройте приглашение от друга." />
+          <CompactEmptyState
+            description="Создайте новый стол или откройте приглашение."
+            imageAlt="Нет активных офлайн игр"
+            imageSrc={resolveMiniAppVisual("offline")}
+            title="Пока нет активных игр"
+            tone="graphite"
+          />
         ) : null}
         {activeRooms.map((room) => (
-          <Link key={room.id} to={getRoomRoute(room.id)}>
-            <article className={cn(cardClassName, "border-l-4 border-l-accent px-5 py-5")}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[1.65rem] font-semibold leading-tight text-white">{room.title}</p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-accent" />
-                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
-                      {getRoomStatusText(room.status)}
-                    </span>
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-foreground/85">
-                  {room.playersCount} {getPlayersLabel(room.playersCount)}
-                </span>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 border-y border-white/5 py-4">
-                <Metric
-                  label="Сумма входа"
-                  value={formatCurrencyFromChips(room.buyInChips, room.currency, room.chipsPerCurrencyUnit)}
-                />
-                <Metric
-                  label="Кол-во фишек"
-                  value={formatChipsCount(room.buyInChips)}
-                  valueClassName="text-accent"
-                />
-              </div>
-              <div className="mt-4">
-                <Button className={cn("w-full", secondaryButtonClassName)}>Открыть</Button>
-              </div>
-            </article>
-          </Link>
+          <CompactGameRow
+            key={room.id}
+            detail={formatCurrencyFromChips(room.buyInChips, room.currency, room.chipsPerCurrencyUnit)}
+            imageAlt="Активный офлайн стол"
+            imageSrc={resolveMiniAppVisual("offline")}
+            onClick={() => onOpenRoom(room.id)}
+            statusLabel={getRoomStatusText(room.status)}
+            statusTone="success"
+            subtitle={`${room.playersCount} ${getPlayersLabel(room.playersCount)}`}
+            title={room.title}
+            value={formatChipsCount(room.buyInChips)}
+          />
         ))}
       </section>
 
@@ -718,89 +1593,146 @@ function GamesScreen(): JSX.Element {
           <h2 className="text-[1.15rem] font-semibold leading-tight text-white">Последние игры</h2>
         </div>
         {roomsState.status !== "loading" && recentRooms.length === 0 ? (
-          <InfoCard title="История пока пустая" description="Завершённые игры появятся здесь автоматически." />
+          <CompactEmptyState
+            description="Завершённые игры появятся здесь автоматически."
+            imageAlt="История игр"
+            imageSrc={resolveMiniAppVisual("settlement-history")}
+            title="История пока пустая"
+            tone="graphite"
+          />
         ) : null}
         {recentRooms.map((room) => (
-          <Link key={room.id} to={getRoomRoute(room.id)}>
-            <article className={cn(mutedCardClassName, "px-3.5 py-3")}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/5 bg-surfaceHigher text-muted">
-                    <MaterialIcon icon="history" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">{room.title}</p>
-                    <p className="mt-0.5 text-xs text-muted">
-                      {room.closedAt ? formatDate(room.closedAt) : "Игра завершена"}
-                    </p>
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className={cn("text-base font-semibold", getResultColorClass(room.myNetResultChips ?? "0"))}>
-                    {formatSignedCurrencyFromChips(
-                      room.myNetResultChips ?? "0",
-                      room.currency,
-                      room.chipsPerCurrencyUnit
-                    )}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted">
-                    {formatSignedChipsCount(room.myNetResultChips ?? "0")}
-                  </p>
-                </div>
+          <CompactGameRow
+            key={room.id}
+            detail={room.closedAt ? formatDate(room.closedAt) : "Игра завершена"}
+            imageAlt="Завершённая офлайн игра"
+            imageSrc={resolveMiniAppVisual("settlement-history")}
+            onClick={() => onOpenRecentRoom(room.id)}
+            statusLabel="Завершена"
+            title={room.title}
+            trailing={
+              <div className="text-right">
+                <p className={cn("text-base font-semibold", getResultColorClass(room.myNetResultChips ?? "0"))}>
+                  {formatSignedCurrencyFromChips(
+                    room.myNetResultChips ?? "0",
+                    room.currency,
+                    room.chipsPerCurrencyUnit
+                  )}
+                </p>
+                <p className="mt-0.5 text-xs text-[#8f9792]">
+                  {formatSignedChipsCount(room.myNetResultChips ?? "0")}
+                </p>
               </div>
-            </article>
-          </Link>
+            }
+          />
         ))}
       </section>
-    </ScreenLayout>
+    </>
   );
 }
 
-function OfflineQuickActions({ inviteCode }: { inviteCode: string | null }): JSX.Element {
-  const inviteRoute = inviteCode ? getJoinRoomRoute(inviteCode) : null;
+export function OfflineActionHero({
+  hasInvite,
+  onCreateRoom,
+  onJoinCodeSubmit,
+  onOpenInvite
+}: {
+  hasInvite: boolean;
+  onCreateRoom: () => void;
+  onJoinCodeSubmit: (inviteCode: string) => void;
+  onOpenInvite: (() => void) | null;
+}): JSX.Element {
+  const [isJoinOpen, setIsJoinOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const normalizedJoinCode = normalizeInviteCode(joinCode);
 
   return (
-    <section className={cn(cardClassName, "relative overflow-hidden px-5 py-6")}>
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(78,222,163,0.09),transparent_45%)]" />
-      <div className="absolute right-[-2.5rem] top-[-2.5rem] h-32 w-32 rounded-full bg-accent/10 blur-3xl" />
-      <div className="relative space-y-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent/90">
-            Оффлайн-игра
+    <div className="space-y-3" data-testid="offline-action-hero">
+      <section className="relative min-h-[158px] overflow-hidden rounded-[22px] bg-[#060706] shadow-[0_18px_42px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.04)]">
+        <picture>
+          <source srcSet={resolveMiniAppVisual("offline-hero-webp")} type="image/webp" />
+          <img
+            alt="Оффлайн-покер"
+            className="absolute inset-0 h-full w-full object-cover"
+            decoding="async"
+            fetchPriority="high"
+            loading="eager"
+            src={resolveMiniAppVisual("offline-hero")}
+          />
+        </picture>
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,4,3,0.9)_0%,rgba(2,4,3,0.46)_58%,rgba(2,4,3,0.08)_100%),linear-gradient(180deg,rgba(0,0,0,0.04),rgba(0,0,0,0.44))]" />
+        <div className="absolute left-5 right-[34%] top-1/2 -translate-y-1/2 text-left">
+          <p className="whitespace-nowrap font-display text-[clamp(1.45rem,6vw,2rem)] font-semibold leading-none text-white drop-shadow-[0_8px_22px_rgba(0,0,0,0.62)]">
+            Оффлайн-игры
           </p>
-          <h2 className="mt-3 font-display text-[2rem] font-semibold leading-tight text-white">
-            Создайте игру
-          </h2>
+          <p className="mt-2 text-sm font-medium leading-none text-white/78">Реальные игры, ребаи и итоги</p>
         </div>
-        <div className="space-y-3">
-          <Link className="block" to={getCreateRoomRoute()}>
-            <Button className="w-full">
-              <MaterialIcon icon="add_circle" />
-              Создать стол
-            </Button>
-          </Link>
-          <Link className="block" to={getJoinRoute()}>
-            <Button className={cn("w-full", secondaryButtonClassName)}>
-              <MaterialIcon icon="group_add" />
-              Присоединиться к столу
-            </Button>
-          </Link>
-          {inviteRoute ? (
-            <Link className="block" to={inviteRoute}>
-              <Button className={cn("w-full", tertiaryButtonClassName)}>
-                <MaterialIcon icon="group_add" />
-                Перейти к приглашению
-              </Button>
-            </Link>
-          ) : null}
-        </div>
-      </div>
-    </section>
-  );
-}
+      </section>
 
-function ClubScreen(): JSX.Element {
-  return <ScreenLayout>{null}</ScreenLayout>;
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          className="min-h-[72px] rounded-2xl bg-[#151716] px-2 py-3 text-left text-white shadow-[inset_0_0_0_1px_rgba(78,222,163,0.12),0_12px_28px_rgba(0,0,0,0.25)] transition hover:bg-[#19201c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4edea3]"
+          onClick={onCreateRoom}
+          type="button"
+        >
+          <span className="flex items-center gap-1.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#4edea3] shadow-[inset_0_0_0_2px_rgba(78,222,163,0.72)]">
+              <MaterialIcon icon="add_circle" />
+            </span>
+            <span className="min-w-0">
+              <span className="block whitespace-nowrap text-[13px] font-semibold leading-tight">Создать игру</span>
+              <span className="mt-1 block whitespace-nowrap text-[10px] font-medium text-[#a8b0ab]">Новая оффлайн игра</span>
+            </span>
+          </span>
+        </button>
+
+        <button
+          className="min-h-[72px] rounded-2xl bg-[#151716] px-2 py-3 text-left text-white shadow-[inset_0_0_0_1px_rgba(78,222,163,0.12),0_12px_28px_rgba(0,0,0,0.25)] transition hover:bg-[#19201c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4edea3]"
+          onClick={() => setIsJoinOpen((current) => !current)}
+          type="button"
+        >
+          <span className="flex items-center gap-1.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#4edea3] shadow-[inset_0_0_0_2px_rgba(78,222,163,0.72)]">
+              <MaterialIcon icon="tag" />
+            </span>
+            <span className="min-w-0">
+              <span className="block whitespace-nowrap text-[13px] font-semibold leading-tight">Войти по коду</span>
+              <span className="mt-1 block whitespace-nowrap text-[10px] font-medium text-[#a8b0ab]">Присоединиться</span>
+            </span>
+          </span>
+        </button>
+      </div>
+
+      {isJoinOpen ? (
+        <section className="rounded-2xl bg-[#151716] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.055)]">
+          <div className="flex gap-2">
+            <input
+              aria-label="Код приглашения"
+              className="min-h-11 flex-1 rounded-xl border border-white/[0.06] bg-[#171918] px-4 text-center text-sm font-semibold uppercase tracking-[0.2em] text-white outline-none transition placeholder:text-[#89918c] focus:border-[#56df9d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#56df9d]"
+              maxLength={16}
+              placeholder="AB12CD"
+              value={joinCode}
+              onChange={(event) => setJoinCode(normalizeInviteCode(event.target.value))}
+            />
+            <Button
+              className="min-h-11 shrink-0 rounded-xl bg-[#4edea3] px-4 text-[#04130d] shadow-none hover:bg-[#67edb3]"
+              disabled={normalizedJoinCode.length === 0}
+              onClick={() => onJoinCodeSubmit(normalizedJoinCode)}
+            >
+              Войти
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      {hasInvite && onOpenInvite ? (
+        <Button className={cn("min-h-11 w-full justify-between rounded-2xl bg-[#151716]", tertiaryButtonClassName)} onClick={onOpenInvite}>
+          <span>Открыть приглашение</span>
+          <MaterialIcon icon="login" />
+        </Button>
+      ) : null}
+    </div>
+  );
 }
 
 function LeaderboardScreen(): JSX.Element {
@@ -808,7 +1740,7 @@ function LeaderboardScreen(): JSX.Element {
   const [mode, setMode] = useState<LeaderboardMode>("offline");
   const [scope, setScope] = useState(DEFAULT_LEADERBOARD_QUERY.scope);
   const [period, setPeriod] = useState(DEFAULT_LEADERBOARD_QUERY.period);
-  const leaderboardColumns = "grid-cols-[2.75rem_minmax(7.5rem,1fr)_minmax(5rem,0.72fr)_3rem]";
+  const [isPokerScoreInfoOpen, setIsPokerScoreInfoOpen] = useState(false);
   const [leaderboardState, setLeaderboardState] = useState<LoadState<GetLeaderboardResponseDto>>({
     status: "idle",
     data: null,
@@ -939,9 +1871,11 @@ function LeaderboardScreen(): JSX.Element {
       <ScreenLayout
         banner={getSessionBanner(state.status, state.errorMessage)}
       >
-        <InfoCard
-          title="Нужен вход через Telegram"
-          description="После авторизации здесь появится общий рейтинг и список игроков, с которыми вы уже играли."
+        <CompactEmptyState
+          title="Нужен вход"
+          description="Откройте приложение через Telegram, чтобы увидеть рейтинг."
+          imageSrc={resolveMiniAppVisual("leaderboard")}
+          tone="graphite"
         />
       </ScreenLayout>
     );
@@ -949,49 +1883,19 @@ function LeaderboardScreen(): JSX.Element {
 
   return (
     <ScreenLayout>
-      <section className={modeToggleClassName}>
-        <SegmentedControl
-          options={[
-            { value: "offline", label: "Офлайн" },
-            { value: "online", label: "Онлайн" }
-          ]}
-          value={mode}
-          onChange={(nextMode) => setMode(nextMode as LeaderboardMode)}
-        />
-      </section>
+      <LeaderboardHeaderSection
+        mode={mode}
+        onInfoClick={() => setIsPokerScoreInfoOpen(true)}
+        onModeChange={setMode}
+        scope={scope}
+      />
 
-      <section className={`${cardClassName} space-y-3`}>
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted">Кого показать</p>
-        <div className="grid grid-cols-2 gap-2">
-          {LEADERBOARD_SCOPE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              className={getFilterButtonClass(scope === option.value, "px-4 py-3")}
-              onClick={() => setScope(option.value)}
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className={`${cardClassName} space-y-3`}>
-        <label className="block">
-          <span className="text-[11px] uppercase tracking-[0.16em] text-muted">Период</span>
-          <select
-            className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-surfaceHigh px-4 text-base text-foreground outline-none transition focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onChange={(event) => setPeriod(event.target.value as (typeof DEFAULT_LEADERBOARD_QUERY)["period"])}
-            value={period}
-          >
-            {LEADERBOARD_PERIOD_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
+      <LeaderboardFiltersSection
+        onPeriodChange={setPeriod}
+        onScopeChange={setScope}
+        period={period}
+        scope={scope}
+      />
 
       {activeLeaderboardState.status === "loading" ? (
         <InfoCard
@@ -1009,8 +1913,7 @@ function LeaderboardScreen(): JSX.Element {
       ) : null}
 
       {activeLeaderboardState.status === "ready" && items.length === 0 ? (
-        <InfoCard
-          title={mode === "online" ? "Онлайн-рейтинг пока пустой" : emptyCopy.title}
+        <CompactEmptyState
           description={
             mode === "online"
               ? scope === "played-with-me"
@@ -1018,87 +1921,198 @@ function LeaderboardScreen(): JSX.Element {
                 : "Как только накопятся завершённые онлайн-игры, здесь появится общий рейтинг."
               : emptyCopy.description
           }
+          imageAlt="Пустой рейтинг"
+          imageSrc={resolveMiniAppVisual("leaderboard")}
+          title={mode === "online" ? "Онлайн-рейтинг пока пустой" : emptyCopy.title}
+          tone={mode === "online" ? "graphite" : "amber"}
         />
       ) : null}
 
       {items.length > 0 ? (
-        <section className="space-y-3">
-          <div className={cn("grid gap-3 px-2 text-[11px] uppercase tracking-[0.18em] text-muted", leaderboardColumns)}>
-            <span>Место</span>
-            <span>Игрок</span>
-            <span className="text-right">Профит</span>
-            <span className="text-right">Score</span>
-          </div>
-          {mode === "online"
-            ? onlineItems.map((player) => (
-                <Link key={player.userId} to={`${getPlayerRoute(player.userId)}?mode=online`}>
-                  <article
-                    className={cn(
-                      mutedCardClassName,
-                      "grid items-center gap-3 px-4 py-3",
-                      leaderboardColumns,
-                      player.userId === state.session?.user.id &&
-                        "border-accent/40 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(26,26,26,0.8))]"
-                    )}
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-surfaceHigher text-sm font-semibold text-white">
-                      {player.rank}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-lg font-semibold text-white">{player.displayName}</p>
-                      <p className="truncate whitespace-nowrap text-xs text-muted">
-                        {player.handsPlayed} {getHandsLabel(player.handsPlayed)} • {formatPercentFromBps(player.winRateBps)} побед
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className={cn("text-lg font-semibold", getToneClass(player.netChips))}>
-                        {formatSignedChipsCount(player.netChips)}
-                      </p>
-                      <p className="text-xs text-muted">
-                        {player.netEstimatedMinor ? formatSignedCurrency(player.netEstimatedMinor, "RUB") : null}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-semibold text-white">{player.onlinePokerScore}</p>
-                    </div>
-                  </article>
-                </Link>
-              ))
-            : offlineItems.map((player) => (
-                <Link key={player.userId} to={getPlayerRoute(player.userId)}>
-                  <article
-                    className={cn(
-                      mutedCardClassName,
-                      "grid items-center gap-3 px-4 py-3",
-                      leaderboardColumns,
-                      player.userId === state.session?.user.id &&
-                        "border-accent/40 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(26,26,26,0.8))]"
-                    )}
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-surfaceHigher text-sm font-semibold text-white">
-                      {player.rank}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-lg font-semibold text-white">{player.displayName}</p>
-                      <p className="truncate whitespace-nowrap text-xs text-muted">
-                        {formatPercentFromBps(player.roiBps)} ROI • {player.gamesCount} {getGamesLabel(player.gamesCount)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className={cn("text-lg font-semibold", getToneClass(player.totalProfitMinor))}>
-                        {formatLeaderboardProfit(player.totalProfitMinor)}
-                      </p>
-                      <p className="text-xs text-muted">{formatPercentFromBps(player.winRateBps)} побед</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-semibold text-white">{player.pokerScore}</p>
-                    </div>
-                  </article>
-                </Link>
-              ))}
-        </section>
+        <LeaderboardEntriesSection
+          currentUserId={state.session?.user.id ?? null}
+          mode={mode}
+          offlineItems={offlineItems}
+          onlineItems={onlineItems}
+        />
       ) : null}
+      <PokerScoreInfoModal open={isPokerScoreInfoOpen} onOpenChange={setIsPokerScoreInfoOpen} />
     </ScreenLayout>
+  );
+}
+
+export function LeaderboardHeaderSection({
+  mode,
+  onInfoClick,
+  scope,
+  onModeChange
+}: {
+  mode: LeaderboardMode;
+  onInfoClick: () => void;
+  scope: (typeof DEFAULT_LEADERBOARD_QUERY)["scope"];
+  onModeChange: (mode: LeaderboardMode) => void;
+}): JSX.Element {
+  return (
+    <section className="glass-card rounded-2xl bg-card p-4" data-testid="leaderboard-header">
+      <div className="flex items-start gap-3">
+        <CompactVisualAccent imageAlt="Рейтинг игроков" imageSrc={resolveMiniAppVisual("leaderboard")} tone="amber" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h1 className="min-w-0 text-[1.45rem] font-semibold leading-tight text-white">
+              {mode === "online" ? "Онлайн-рейтинг" : "Оффлайн-рейтинг"}
+            </h1>
+            <InfoIconButton label="Что такое Poker Score" onClick={onInfoClick} />
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            {scope === "all" ? "Все игроки" : "Играли со мной"} · {mode === "online" ? "онлайн" : "офлайн"}
+          </p>
+        </div>
+      </div>
+      <div className={cn("mt-3", modeToggleClassName)}>
+        <SegmentedControl
+          options={[
+            { value: "offline", label: "Офлайн" },
+            { value: "online", label: "Онлайн" }
+          ]}
+          value={mode}
+          onChange={(nextMode) => onModeChange(nextMode as LeaderboardMode)}
+        />
+      </div>
+    </section>
+  );
+}
+
+export function LeaderboardFiltersSection({
+  scope,
+  period,
+  onScopeChange,
+  onPeriodChange
+}: {
+  scope: (typeof DEFAULT_LEADERBOARD_QUERY)["scope"];
+  period: (typeof DEFAULT_LEADERBOARD_QUERY)["period"];
+  onScopeChange: (scope: (typeof DEFAULT_LEADERBOARD_QUERY)["scope"]) => void;
+  onPeriodChange: (period: (typeof DEFAULT_LEADERBOARD_QUERY)["period"]) => void;
+}): JSX.Element {
+  return (
+    <section className="glass-card rounded-2xl bg-white/[0.025] p-3">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem]">
+        <div className="grid grid-cols-2 gap-2">
+          {LEADERBOARD_SCOPE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              className={getFilterButtonClass(scope === option.value, "px-3 py-2.5", true)}
+              onClick={() => onScopeChange(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <label className="block">
+          <select
+            aria-label="Интервал рейтинга"
+            className="min-h-10 w-full rounded-xl border border-white/10 bg-surfaceHigh px-3 text-sm text-foreground outline-none transition focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onChange={(event) => onPeriodChange(event.target.value as (typeof DEFAULT_LEADERBOARD_QUERY)["period"])}
+            value={period}
+          >
+            {LEADERBOARD_PERIOD_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </section>
+  );
+}
+
+export function LeaderboardEntriesSection({
+  mode,
+  offlineItems,
+  onlineItems,
+  currentUserId
+}: {
+  mode: LeaderboardMode;
+  offlineItems: GetLeaderboardResponseDto["items"];
+  onlineItems: GetVirtualLeaderboardResponseDto["items"];
+  currentUserId: string | null;
+}): JSX.Element {
+  const leaderboardColumns = "grid-cols-[2.75rem_minmax(7.5rem,1fr)_minmax(5rem,0.72fr)_3rem]";
+
+  return (
+    <section className="space-y-3">
+      <div className={cn("grid gap-3 px-2 text-[11px] uppercase tracking-[0.18em] text-muted", leaderboardColumns)}>
+        <span>Место</span>
+        <span>Игрок</span>
+        <span className="text-right">Профит</span>
+        <span className="text-right">Score</span>
+      </div>
+      {mode === "online"
+        ? onlineItems.map((player) => (
+            <Link key={player.userId} to={`${getPlayerRoute(player.userId)}?mode=online`}>
+              <article
+                className={cn(
+                  mutedCardClassName,
+                  "grid items-center gap-3 px-4 py-3",
+                  leaderboardColumns,
+                  player.userId === currentUserId &&
+                    "border-accent/40 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(26,26,26,0.8))]"
+                )}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-surfaceHigher text-sm font-semibold text-white">
+                  {player.rank}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-semibold text-white">{player.displayName}</p>
+                  <p className="truncate whitespace-nowrap text-xs text-muted">
+                    {player.handsPlayed} {getHandsLabel(player.handsPlayed)} • {formatPercentFromBps(player.winRateBps)} побед
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className={cn("text-lg font-semibold", player.netEstimatedMinor ? getToneClass(player.netEstimatedMinor) : "text-muted")}>
+                    {formatSignedWholeRubles(player.netEstimatedMinor)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-semibold text-white">{player.onlinePokerScore}</p>
+                </div>
+              </article>
+            </Link>
+          ))
+        : offlineItems.map((player) => (
+            <Link key={player.userId} to={getPlayerRoute(player.userId)}>
+              <article
+                className={cn(
+                  mutedCardClassName,
+                  "grid items-center gap-3 px-4 py-3",
+                  leaderboardColumns,
+                  player.userId === currentUserId &&
+                    "border-accent/40 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(26,26,26,0.8))]"
+                )}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-surfaceHigher text-sm font-semibold text-white">
+                  {player.rank}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-semibold text-white">{player.displayName}</p>
+                  <p className="truncate whitespace-nowrap text-xs text-muted">
+                    {formatPercentFromBps(player.roiBps)} ROI • {player.gamesCount} {getGamesLabel(player.gamesCount)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className={cn("text-lg font-semibold", getToneClass(player.totalProfitMinor))}>
+                    {formatLeaderboardProfit(player.totalProfitMinor)}
+                  </p>
+                  <p className="text-xs text-muted">{formatPercentFromBps(player.winRateBps)} побед</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-semibold text-white">{player.pokerScore}</p>
+                </div>
+              </article>
+            </Link>
+          ))}
+    </section>
   );
 }
 
@@ -1268,9 +2282,11 @@ function PlayerProfileScreen(): JSX.Element {
         backTo={getLeaderboardRoute()}
         banner={getSessionBanner(state.status, state.errorMessage)}
       >
-        <InfoCard
-          title="Нужен вход через Telegram"
-          description="После авторизации здесь будут показатели игрока и его последние завершённые игры."
+        <CompactEmptyState
+          title="Нужен вход"
+          description="Откройте приложение через Telegram, чтобы увидеть профиль."
+          imageSrc={resolveMiniAppVisual("profile")}
+          tone="graphite"
         />
       </ScreenLayout>
     );
@@ -1420,37 +2436,14 @@ function PlayerProfileScreen(): JSX.Element {
 
     return (
       <ScreenLayout>
-        <section className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,11rem)] gap-4">
-          <div className="min-w-0">
-            <h2 className="truncate font-display text-[2.4rem] font-semibold leading-none text-white">
-              {user.displayName}
-            </h2>
-            <p className="mt-3 text-[1.1rem] text-muted">
-              {user.username ? `@${user.username}` : "Онлайн-статистика по завершённым играм"}
-            </p>
-            <p className="mt-2 text-sm font-semibold text-accent">{virtualProfile.style.archetype.title}</p>
-          </div>
-          <div className={cn(cardClassName, "flex flex-col justify-center px-4 py-4")}>
-            <div className="flex items-center gap-2">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted">Poker Score</p>
-              <InfoIconButton label="Что такое Poker Score" onClick={() => setIsPokerScoreInfoOpen(true)} />
-            </div>
-            <p className="mt-3 font-display text-[3rem] font-semibold leading-none text-accent">
-              {stats.onlinePokerScore}
-            </p>
-          </div>
-        </section>
-
-        <section className={modeToggleClassName}>
-          <SegmentedControl
-            options={[
-              { value: "offline", label: "Офлайн" },
-              { value: "online", label: "Онлайн" }
-            ]}
-            value={mode}
-            onChange={(nextMode) => updateMode(nextMode as ProfileMode)}
-          />
-        </section>
+        <ProfileHeaderSection
+          mode={mode}
+          onInfoClick={() => setIsPokerScoreInfoOpen(true)}
+          onModeChange={updateMode}
+          score={String(stats.onlinePokerScore)}
+          subtitle={user.username ? `@${user.username}` : "Онлайн-статистика"}
+          title={user.displayName}
+        />
 
         <section className="grid grid-cols-2 gap-3">
           <Metric
@@ -1477,25 +2470,21 @@ function PlayerProfileScreen(): JSX.Element {
           style={virtualProfile.style}
         />
 
-        <section className={cn(cardClassName, "space-y-4")}>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-[1.4rem] font-semibold text-white">Динамика результата</h3>
-              <p className="mt-1 text-sm text-muted">Последние завершённые онлайн-игры, от старых к новым.</p>
-            </div>
-            {recentResults.length > 0 ? (
+        <CompactPanel
+          action={
+            recentResults.length > 0 ? (
               <p className={cn("text-lg font-semibold", getToneClass(getLatestVirtualCumulativeNetEstimatedMinor(recentResults)))}>
                 {formatSignedCurrency(getLatestVirtualCumulativeNetEstimatedMinor(recentResults), "RUB")}
               </p>
-            ) : null}
-          </div>
+            ) : null
+          }
+          description="Последние завершённые онлайн-игры, от старых к новым."
+          title="Динамика результата"
+        >
           <VirtualProfileTrendChart recentResults={recentResults} />
-        </section>
+        </CompactPanel>
 
-        <section className={cn(cardClassName, "space-y-4")}>
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-white">Последние результаты</h3>
-          </div>
+        <CompactPanel title="Последние результаты">
           {recentResults.length === 0 ? (
             <EmptyStatePanel text="Последние результаты появятся после завершённых онлайн-игр." />
           ) : (
@@ -1521,8 +2510,9 @@ function PlayerProfileScreen(): JSX.Element {
               />
             </>
           )}
-        </section>
+        </CompactPanel>
         <StyleStatsInfoModal open={isStyleStatsInfoOpen} onOpenChange={setIsStyleStatsInfoOpen} />
+        <PokerScoreInfoModal open={isPokerScoreInfoOpen} onOpenChange={setIsPokerScoreInfoOpen} />
       </ScreenLayout>
     );
   }
@@ -1531,36 +2521,14 @@ function PlayerProfileScreen(): JSX.Element {
 
   return (
     <ScreenLayout>
-      <section className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,11rem)] gap-4">
-        <div className="min-w-0">
-          <h2 className="truncate font-display text-[2.4rem] font-semibold leading-none text-white">
-            {user.displayName}
-          </h2>
-          <p className="mt-3 text-[1.1rem] text-muted">
-            {user.username ? `@${user.username}` : "Показатели по завершённым играм"}
-          </p>
-        </div>
-        <div className={cn(cardClassName, "flex flex-col justify-center px-4 py-4")}>
-          <div className="flex items-center gap-2">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted">Poker Score</p>
-            <InfoIconButton label="Что такое Poker Score" onClick={() => setIsPokerScoreInfoOpen(true)} />
-          </div>
-          <p className="mt-3 font-display text-[3rem] font-semibold leading-none text-accent">
-            {stats.pokerScore}
-          </p>
-        </div>
-      </section>
-
-      <section className={modeToggleClassName}>
-        <SegmentedControl
-          options={[
-            { value: "offline", label: "Офлайн" },
-            { value: "online", label: "Онлайн" }
-          ]}
-          value={mode}
-          onChange={(nextMode) => updateMode(nextMode as ProfileMode)}
-        />
-      </section>
+      <ProfileHeaderSection
+        mode={mode}
+        onInfoClick={() => setIsPokerScoreInfoOpen(true)}
+        onModeChange={updateMode}
+        score={String(stats.pokerScore)}
+        subtitle={user.username ? `@${user.username}` : "Офлайн-статистика"}
+        title={user.displayName}
+      />
 
       <section className="grid grid-cols-2 gap-3">
         <Metric
@@ -1578,25 +2546,21 @@ function PlayerProfileScreen(): JSX.Element {
         />
       </section>
 
-      <section className={cn(cardClassName, "space-y-4")}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-[1.4rem] font-semibold text-white">Динамика выигрышей</h3>
-            <p className="mt-1 text-sm text-muted">Последние 10 закрытых игр, от старых к новым.</p>
-          </div>
-          {recentGames.length > 0 ? (
+      <CompactPanel
+        action={
+          recentGames.length > 0 ? (
             <p className={cn("text-lg font-semibold", getToneClass(getLatestCumulativeProfitMinor(recentGames)))}>
               {formatSignedCurrency(getLatestCumulativeProfitMinor(recentGames), recentGames[0]!.currency)}
             </p>
-          ) : null}
-        </div>
+          ) : null
+        }
+        description="Последние 10 закрытых игр, от старых к новым."
+        title="Динамика выигрышей"
+      >
         <ProfileTrendChart recentGames={recentGames} />
-      </section>
+      </CompactPanel>
 
-      <section className={cn(cardClassName, "space-y-4")}>
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold text-white">Последние результаты</h3>
-        </div>
+      <CompactPanel title="Последние результаты">
         <StatRow
           label="Лучшая игра"
           value={formatSignedMinorStat(stats.bestGameMinor)}
@@ -1613,28 +2577,97 @@ function PlayerProfileScreen(): JSX.Element {
           valueClassName={getToneClass(stats.avgProfitMinor)}
         />
         <StatRow label="Стабильность" value={formatPercentFromBps(stats.stabilityScoreBps)} />
-      </section>
+      </CompactPanel>
       <PokerScoreInfoModal open={isPokerScoreInfoOpen} onOpenChange={setIsPokerScoreInfoOpen} />
     </ScreenLayout>
   );
 }
 
+export function ProfileHeaderSection({
+  title,
+  subtitle,
+  score,
+  mode,
+  onModeChange,
+  onInfoClick
+}: {
+  title: string;
+  subtitle: string;
+  score: string;
+  mode: ProfileMode;
+  onModeChange: (mode: ProfileMode) => void;
+  onInfoClick: () => void;
+}): JSX.Element {
+  return (
+    <section className="glass-card rounded-2xl bg-card p-4" data-testid="player-profile-header">
+      <div className="flex items-start gap-3">
+        <CompactVisualAccent imageAlt="Профиль игрока" imageSrc={resolveMiniAppVisual("profile")} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#93a099]">Профиль игрока</p>
+          <h1 className="mt-1 truncate text-[1.45rem] font-semibold leading-tight text-white">{title}</h1>
+          <p className="mt-1 truncate text-sm text-muted">{subtitle}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="flex items-center justify-end gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#93a099]">Score</p>
+            <InfoIconButton label="Что такое Poker Score" onClick={onInfoClick} />
+          </div>
+          <p className="mt-1 font-display text-[2rem] font-semibold leading-none text-accent">{score}</p>
+        </div>
+      </div>
+      <div className={cn("mt-3", modeToggleClassName)}>
+        <SegmentedControl
+          options={[
+            { value: "offline", label: "Офлайн" },
+            { value: "online", label: "Онлайн" }
+          ]}
+          value={mode}
+          onChange={(nextMode) => onModeChange(nextMode as ProfileMode)}
+        />
+      </div>
+    </section>
+  );
+}
+
 function CreateRoomScreen(): JSX.Element {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { state } = useSession();
+  const { clubsState } = useClubsList();
   const { refreshRooms } = useRoomsList();
+  const clubIdFromQuery = searchParams.get("clubId")?.trim() ?? "";
   const [values, setValues] = useState<CreateRoomFormValues>({
     title: "",
     currency: "RUB",
     buyInChips: "",
     rebuyChips: "",
     chipsPerCurrencyUnit: "",
-    rebuyPermission: "PLAYER_SELF"
+    rebuyPermission: "PLAYER_SELF",
+    clubId: "",
+    scheduledStartAt: "",
+    sendNotifications: true,
+    maxPlayers: "",
+    location: ""
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canSubmit = state.status === "authenticated" && !!state.accessToken;
+
+  useEffect(() => {
+    if (!clubIdFromQuery) {
+      return;
+    }
+
+    setValues((current) =>
+      current.clubId === clubIdFromQuery
+        ? current
+        : {
+            ...current,
+            clubId: clubIdFromQuery
+          }
+    );
+  }, [clubIdFromQuery]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -1670,167 +2703,198 @@ function CreateRoomScreen(): JSX.Element {
 
   return (
     <ScreenLayout banner={state.status === "unsupported" ? getSessionBanner(state.status, null) : null}>
-      <section className={cn(cardClassName, "relative overflow-hidden px-4 py-4")}>
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(78,222,163,0.08),transparent_55%)]" />
-        <div className="relative">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Настройка стола</p>
-          <h2 className="mt-2 text-[1.8rem] font-semibold text-white">Новая игра</h2>
-        </div>
-      </section>
-
-      <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
-        <Field label="Как назовём игру?">
-          <input
-            className={inputClassName}
-            maxLength={ROOM_TITLE_MAX_LENGTH}
-            value={values.title}
-            onChange={(event) => setValues((current) => ({ ...current, title: event.target.value }))}
-            placeholder="Например, Пятничный покер"
-          />
-        </Field>
-
-        <Field label="В какой валюте считаем?">
-          <div className="mt-2 grid grid-cols-3 gap-3">
-            {[
-              { value: "RUB", label: "RUB" },
-              { value: "USD", label: "USD" },
-              { value: "EUR", label: "EUR" }
-            ].map((option) => (
-              <button
-                key={option.value}
-                className={getFilterButtonClass(values.currency === option.value)}
-                onClick={() => setValues((current) => ({ ...current, currency: option.value }))}
-                type="button"
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </Field>
-
-        <section className="glass-card rounded-2xl border border-accent/25 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(20,20,20,0.7))] px-4 py-4">
-          <p className="flex items-center gap-2 text-sm font-medium text-accent">
-            <MaterialIcon icon="add_circle" />
-            Сумма входа
-          </p>
-          <div className="mt-4 flex items-end justify-between gap-3">
+      <CompactFormShell
+        eyebrow="Новый стол"
+        footer={
+          errorMessage ? (
+            <p className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+              {errorMessage}
+            </p>
+          ) : null
+        }
+        imageAlt="Создание стола"
+        imageSrc={resolveMiniAppVisual("create-table")}
+        title="Создать офлайн стол"
+        tone="emerald"
+      >
+        <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
+          <Field label="Название">
             <input
-              className="w-full bg-transparent text-[2.3rem] font-semibold leading-none text-white outline-none placeholder:text-white/25"
-              inputMode="numeric"
-              value={values.buyInChips}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, buyInChips: event.target.value }))
-              }
-              placeholder="10000"
+              className={inputClassName}
+              maxLength={ROOM_TITLE_MAX_LENGTH}
+              value={values.title}
+              onChange={(event) => setValues((current) => ({ ...current, title: event.target.value }))}
+              placeholder="Например, Пятничный покер"
             />
-            <span className="pb-1 text-sm font-semibold uppercase text-accent">фишек</span>
-          </div>
-          <p className="mt-3 text-sm leading-6 text-muted">Сколько фишек получает игрок при входе за стол.</p>
-        </section>
+          </Field>
 
-        <Field label="Курс фишек к валюте">
-          <input
-            className={inputClassName}
-            inputMode="numeric"
-            value={values.chipsPerCurrencyUnit}
-            onChange={(event) =>
-              setValues((current) => ({ ...current, chipsPerCurrencyUnit: event.target.value }))
-            }
-            placeholder="Например, 100"
-          />
-        </Field>
-
-        <Field label="Ребай в фишках">
-          <input
-            className={inputClassName}
-            inputMode="numeric"
-            value={values.rebuyChips}
-            onChange={(event) =>
-              setValues((current) => ({ ...current, rebuyChips: event.target.value }))
-            }
-            placeholder="Например, 2500"
-          />
-        </Field>
-
-        <Field label="Кто добавляет ребаи">
-          <div className="mt-2 space-y-3">
-            {([
-              {
-                value: "PLAYER_SELF",
-                label: "Игроки сами отмечают ребаи",
-                icon: "person_add"
-              },
-              {
-                value: "ADMIN_APPROVAL",
-                label: "Админ подтверждает каждый ребай",
-                icon: "verified_user"
-              },
-              {
-                value: "ADMIN_ONLY",
-                label: "Только админ добавляет ребаи",
-                icon: "admin_panel_settings"
-              }
-            ] as const).map((option) => {
-              const isActive = values.rebuyPermission === option.value;
-
-              return (
+          <Field label="Валюта">
+            <div className="mt-2 grid grid-cols-3 gap-3">
+              {[
+                { value: "RUB", label: "RUB" },
+                { value: "USD", label: "USD" },
+                { value: "EUR", label: "EUR" }
+              ].map((option) => (
                 <button
                   key={option.value}
-                  className={cn(
-                    "flex min-h-12 w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition",
-                    isActive
-                      ? "border-accent/50 bg-accent/10"
-                      : "border-white/8 bg-white/[0.02] hover:bg-white/[0.04]"
-                  )}
-                  onClick={() =>
-                    setValues((current) => ({
-                      ...current,
-                      rebuyPermission: option.value
-                    }))
-                  }
+                  className={getFilterButtonClass(values.currency === option.value)}
+                  onClick={() => setValues((current) => ({ ...current, currency: option.value }))}
                   type="button"
                 >
-                  <span className="flex items-center gap-3">
-                    <span className={cn("text-muted", isActive && "text-accent")}>
-                      <MaterialIcon icon={option.icon} />
-                    </span>
-                    <span className={cn("text-sm", isActive ? "text-white" : "text-muted")}>
-                      {option.label}
-                    </span>
-                  </span>
-                  <span
-                    className={cn(
-                      "h-5 w-5 rounded-full border",
-                      isActive ? "border-accent bg-accent" : "border-white/15 bg-transparent"
-                    )}
-                  />
+                  {option.label}
                 </button>
-              );
-            })}
-          </div>
-        </Field>
+              ))}
+            </div>
+          </Field>
 
-        <section className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
-          <p className="text-sm font-semibold text-white">Что получится</p>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <Metric label="Вход" value={values.buyInChips.trim() || "Не задан"} />
-            <Metric label="Ребай" value={values.rebuyChips.trim() || "Не задан"} />
-            <Metric label="Валюта" value={getCurrencyLabel(values.currency)} />
-            <Metric label="Курс" value={values.chipsPerCurrencyUnit.trim() || "Не задан"} />
-            <Metric label="Режим" value={getRebuyPermissionLabel(values.rebuyPermission)} />
-          </div>
-        </section>
+          <section className="glass-card rounded-2xl border border-accent/25 bg-[linear-gradient(180deg,rgba(78,222,163,0.08),rgba(20,20,20,0.7))] px-4 py-4">
+            <p className="flex items-center gap-2 text-sm font-medium text-accent">
+              <MaterialIcon icon="add_circle" />
+              Вход
+            </p>
+            <div className="mt-4 flex items-end justify-between gap-3">
+              <input
+                className="w-full bg-transparent text-[2.3rem] font-semibold leading-none text-white outline-none placeholder:text-white/25"
+                inputMode="numeric"
+                value={values.buyInChips}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, buyInChips: event.target.value }))
+                }
+                placeholder="10000"
+              />
+              <span className="pb-1 text-sm font-semibold uppercase text-accent">фишек</span>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-muted">Сколько фишек получает игрок на старте.</p>
+          </section>
 
-        {errorMessage ? (
-          <p className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            {errorMessage}
-          </p>
-        ) : null}
+          <Field label="Курс">
+            <input
+              className={inputClassName}
+              inputMode="numeric"
+              value={values.chipsPerCurrencyUnit}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, chipsPerCurrencyUnit: event.target.value }))
+              }
+              placeholder="Например, 100"
+            />
+          </Field>
 
-        <Button className="w-full" disabled={isSubmitting || !canSubmit} type="submit">
-          {isSubmitting ? "Создаём стол" : "Создать стол"}
-        </Button>
-      </form>
+          <Field label="Ребай">
+            <input
+              className={inputClassName}
+              inputMode="numeric"
+              value={values.rebuyChips}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, rebuyChips: event.target.value }))
+              }
+              placeholder="Например, 2500"
+            />
+          </Field>
+
+          <Field label="Кто добавляет ребаи">
+            <div className="mt-2 space-y-3">
+              {([
+                {
+                  value: "PLAYER_SELF",
+                  label: "Игроки сами отмечают ребаи",
+                  icon: "person_add"
+                },
+                {
+                  value: "ADMIN_APPROVAL",
+                  label: "Админ подтверждает каждый ребай",
+                  icon: "verified_user"
+                },
+                {
+                  value: "ADMIN_ONLY",
+                  label: "Только админ добавляет ребаи",
+                  icon: "admin_panel_settings"
+                }
+              ] as const).map((option) => {
+                const isActive = values.rebuyPermission === option.value;
+
+                return (
+                  <button
+                    key={option.value}
+                    className={cn(
+                      "flex min-h-12 w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition",
+                      isActive
+                        ? "border-accent/50 bg-accent/10"
+                        : "border-white/8 bg-white/[0.02] hover:bg-white/[0.04]"
+                    )}
+                    onClick={() =>
+                      setValues((current) => ({
+                        ...current,
+                        rebuyPermission: option.value
+                      }))
+                    }
+                    type="button"
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className={cn("text-muted", isActive && "text-accent")}>
+                        <MaterialIcon icon={option.icon} />
+                      </span>
+                      <span className={cn("text-sm", isActive ? "text-white" : "text-muted")}>
+                        {option.label}
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        "h-5 w-5 rounded-full border",
+                        isActive ? "border-accent bg-accent" : "border-white/15 bg-transparent"
+                      )}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          <ClubSchedulingSection
+            clubId={values.clubId ?? ""}
+            clubs={(clubsState.data?.clubs ?? []).map((club) => ({
+              id: club.id,
+              name: club.name
+            }))}
+            description="Если игра привязана к клубу, участники увидят приглашение и смогут заранее ответить."
+            isLoadingClubs={clubsState.status === "loading"}
+            location={values.location ?? ""}
+            maxPlayers={values.maxPlayers ?? ""}
+            scheduledLabel="Когда собираетесь"
+            scheduledStartAt={values.scheduledStartAt ?? ""}
+            sendNotifications={values.sendNotifications ?? true}
+            title="Клуб и мероприятие"
+            onClubIdChange={(value) => setValues((current) => ({ ...current, clubId: value }))}
+            onLocationChange={(value) => setValues((current) => ({ ...current, location: value }))}
+            onMaxPlayersChange={(value) => setValues((current) => ({ ...current, maxPlayers: value }))}
+            onScheduledStartAtChange={(value) =>
+              setValues((current) => ({ ...current, scheduledStartAt: value }))
+            }
+            onSendNotificationsChange={(value) =>
+              setValues((current) => ({ ...current, sendNotifications: value }))
+            }
+          />
+
+          <CompactPanel title="Что получится" description="Проверьте настройки перед стартом.">
+            <div className="grid grid-cols-2 gap-3">
+              <Metric label="Вход" value={values.buyInChips.trim() || "Не задан"} />
+              <Metric label="Ребай" value={values.rebuyChips.trim() || "Не задан"} />
+              <Metric label="Валюта" value={getCurrencyLabel(values.currency)} />
+              <Metric label="Курс" value={values.chipsPerCurrencyUnit.trim() || "Не задан"} />
+              <Metric label="Режим" value={getRebuyPermissionLabel(values.rebuyPermission)} />
+              {values.clubId ? (
+                <Metric
+                  label="Событие"
+                  value={values.scheduledStartAt ? values.scheduledStartAt.replace("T", " ") : "Не задано"}
+                />
+              ) : null}
+            </div>
+          </CompactPanel>
+
+          <Button className="w-full" disabled={isSubmitting || !canSubmit} type="submit">
+            {isSubmitting ? "Создаём стол" : "Создать стол"}
+          </Button>
+        </form>
+      </CompactFormShell>
     </ScreenLayout>
   );
 }
@@ -2560,61 +3624,61 @@ function JoinRoomScreen(): JSX.Element {
 
   return (
     <ScreenLayout banner={getSessionBanner(state.status, state.errorMessage)}>
-      <section className="flex flex-col gap-4 pb-3 pt-1 text-center">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-2 border-accent bg-[radial-gradient(circle,rgba(78,222,163,0.14),rgba(18,18,18,0.95))] text-white shadow-glow">
-          <span className="font-display text-[1.6rem] font-semibold">
-            {getInviteInitials(normalizedInviteCode)}
-          </span>
-        </div>
-        <div className="space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">
-            Приглашение в игру
-          </p>
-          <h2 className="font-display text-[2rem] font-semibold leading-tight text-white">
-            Готовы присоединиться?
-          </h2>
-          <p className="mx-auto max-w-[18rem] text-sm leading-6 text-muted">
-            Введите код и сразу откроем игру.
-          </p>
-        </div>
+      <div className="pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <CompactFormShell
+          eyebrow="Приглашение"
+          footer={
+            state.status === "unsupported" ? (
+              <p className="text-sm leading-6 text-muted">
+                Для реального входа откройте эту ссылку в Telegram Mini App.
+              </p>
+            ) : null
+          }
+          headerAside={
+            <div className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent/15 text-white shadow-[inset_0_0_0_1px_rgba(78,222,163,0.28)]">
+              <span className="font-display text-[1.1rem] font-semibold">
+                {getInviteInitials(normalizedInviteCode)}
+              </span>
+            </div>
+          }
+          imageAlt="Код приглашения"
+          imageSrc={resolveMiniAppVisual("join-code")}
+          title="Присоединиться к игре"
+          tone="graphite"
+        >
+          <div className="space-y-4">
+            <label className="block text-left">
+              <span className={labelClassName}>Код приглашения</span>
+              <input
+                autoCapitalize="characters"
+                autoComplete="off"
+                className={cn(inputClassName, "uppercase tracking-[0.18em]")}
+                inputMode="text"
+                onChange={(event) => setInviteCodeInput(normalizeInviteCode(event.target.value))}
+                placeholder="Например, PT2025"
+                spellCheck={false}
+                type="text"
+                value={inviteCodeInput}
+              />
+            </label>
 
-        <label className="block text-left">
-          <span className={labelClassName}>Код приглашения</span>
-          <input
-            autoCapitalize="characters"
-            autoComplete="off"
-            className={cn(inputClassName, "uppercase tracking-[0.18em]")}
-            inputMode="text"
-            onChange={(event) => setInviteCodeInput(normalizeInviteCode(event.target.value))}
-            placeholder="Например, PT2025"
-            spellCheck={false}
-            type="text"
-            value={inviteCodeInput}
-          />
-        </label>
+            {errorMessage ? (
+              <p className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                {errorMessage}
+              </p>
+            ) : null}
 
-        {errorMessage ? (
-          <p className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            {errorMessage}
-          </p>
-        ) : null}
-
-        <div className="space-y-3">
-          <Button
-            className="w-full"
-            disabled={isSubmitting || normalizedInviteCode.length === 0}
-            onClick={() => void handleJoin()}
-          >
-            <MaterialIcon icon="login" />
-            {isSubmitting ? "Подключаем стол" : "Присоединиться к игре"}
-          </Button>
-          {state.status === "unsupported" ? (
-            <p className="text-sm leading-6 text-muted">
-              Для реального входа откройте эту ссылку в Telegram Mini App.
-            </p>
-          ) : null}
-        </div>
-      </section>
+            <Button
+              className="w-full"
+              disabled={isSubmitting || normalizedInviteCode.length === 0}
+              onClick={() => void handleJoin()}
+            >
+              <MaterialIcon icon="login" />
+              {isSubmitting ? "Подключаем стол" : "Присоединиться"}
+            </Button>
+          </div>
+        </CompactFormShell>
+      </div>
     </ScreenLayout>
   );
 }
@@ -2849,10 +3913,10 @@ function SegmentedControl({
         <button
           key={option.value}
           className={cn(
-            "min-h-9 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+            "min-h-9 rounded-xl px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
             value === option.value
-              ? "border-white/16 bg-white text-[#111313]"
-              : "border-transparent bg-transparent text-muted hover:bg-white/[0.04] hover:text-white"
+              ? "bg-[linear-gradient(180deg,rgba(86,223,157,0.2),rgba(26,38,31,0.96))] text-[#e3fff0] shadow-[inset_0_0_0_1px_rgba(86,223,157,0.08)]"
+              : "bg-transparent text-muted hover:bg-white/[0.04] hover:text-white"
           )}
           onClick={() => onChange(option.value)}
           type="button"
@@ -3614,6 +4678,17 @@ function formatSignedCurrency(value: string, currency: string): string {
   return amount > 0n ? `+${formatted}` : formatted;
 }
 
+function formatSignedWholeRubles(value: string | null | undefined): string {
+  if (!value) {
+    return "—";
+  }
+
+  const rubles = BigInt(value) / 100n;
+  const formatted = formatChips(rubles.toString());
+
+  return rubles > 0n ? `+${formatted}` : formatted;
+}
+
 function formatTrendAxisCurrency(value: number, currency: string): string {
   return formatMinorMoney(String(Math.round(value * 100)), currency);
 }
@@ -3810,7 +4885,79 @@ function MaterialIcon({
   );
 }
 
-function getChromeSubtitle(pathname: string): string {
+function getHomeTargetRoute(target: HomeTarget): string {
+  switch (target.kind) {
+    case "active-turn":
+    case "virtual-table":
+      return getVirtualTableRoute(target.tableId);
+    case "offline-room":
+      return getRoomRoute(target.roomId);
+    case "event":
+      return getClubEventRoute(target.clubId, target.eventId);
+    case "club":
+      return getClubRoute();
+    default:
+      return getClubRoute();
+  }
+}
+
+function getHomeRsvpLabel(status: ClubEventListItemDto["myRsvpStatus"]): string {
+  switch (status) {
+    case "GOING":
+      return "Иду";
+    case "MAYBE":
+      return "Возможно";
+    case "DECLINED":
+      return "Не иду";
+    case "WAITLIST":
+      return "Лист";
+    case "NO_RESPONSE":
+    case null:
+    case undefined:
+      return "Ответить";
+    default:
+      return "Событие";
+  }
+}
+
+function getHomeEventTypeLabel(type: ClubEventListItemDto["type"]): string {
+  return type === "ONLINE_TABLE" ? "Онлайн" : "Оффлайн";
+}
+
+function formatHomeEventTime(value: string): string {
+  const date = new Date(value);
+
+  if (!Number.isFinite(date.getTime())) {
+    return "время уточняется";
+  }
+
+  return date.toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+export function getChromeSubtitle(pathname: string): string {
+  if (/^\/clubs\/[^/]+\/events\/[^/]+$/.test(pathname)) {
+    return "Мероприятие клуба";
+  }
+
+  if (/^\/clubs\/[^/]+\/invite$/.test(pathname)) {
+    return "Приглашение";
+  }
+
+  if (/^\/clubs\/join\/[^/]+$/.test(pathname)) {
+    return "Приглашение в клуб";
+  }
+
+  if (pathname === getClubsNewRoute()) {
+    return "Новый клуб";
+  }
+
+  if (/^\/clubs\/[^/]+$/.test(pathname) || pathname === "/clubs") {
+    return "Клуб";
+  }
+
   if (pathname.endsWith("/history") || pathname.includes("/hands/")) {
     return "История раздач";
   }
@@ -3848,14 +4995,14 @@ function getChromeSubtitle(pathname: string): string {
   }
 
   if (pathname === getLeaderboardRoute()) {
-    return "Лидерборд";
+    return "Рейтинг";
   }
 
   if (pathname === getCreateRoomRoute()) {
     return "Новый стол";
   }
 
-  if (isJoinRoutePath(pathname)) {
+  if (isOfflineJoinRoutePath(pathname)) {
     return "Приглашение в игру";
   }
 
@@ -3870,12 +5017,26 @@ function getChromeSubtitle(pathname: string): string {
   return "Poker tracker";
 }
 
+function isBrandHeaderRoute(pathname: string): boolean {
+  return (
+    pathname === getGamesRoute() ||
+    pathname === getVirtualLobbyRoute() ||
+    pathname === getClubRoute() ||
+    pathname === getLeaderboardRoute() ||
+    /^\/players\/[^/]+$/.test(pathname)
+  );
+}
+
 function isGamesBaseRoute(pathname: string): boolean {
   return pathname === getGamesRoute() || pathname === getCreateRoomRoute() || isOfflineJoinRoutePath(pathname) || pathname.startsWith("/rooms/");
 }
 
-function isJoinRoutePath(pathname: string): boolean {
-  return isOfflineJoinRoutePath(pathname) || pathname === getJoinVirtualTableRoute() || pathname.startsWith("/poker/join/");
+function isCompactJoinRoutePath(pathname: string): boolean {
+  return (
+    pathname === getJoinVirtualTableRoute() ||
+    pathname.startsWith("/poker/join/") ||
+    pathname.startsWith("/clubs/join/")
+  );
 }
 
 function isOfflineJoinRoutePath(pathname: string): boolean {
@@ -3886,8 +5047,9 @@ function isVirtualPokerRoute(pathname: string): boolean {
   return pathname === getVirtualLobbyRoute() || pathname.startsWith("/poker/");
 }
 
-function isVirtualTableFullscreenRoute(pathname: string): boolean {
-  return /^\/poker\/tables\/[^/]+$/.test(pathname);
+function getVirtualTableRouteId(pathname: string): string | null {
+  const match = /^\/poker\/tables\/([^/]+)$/.exec(pathname);
+  return match?.[1] ?? null;
 }
 
 function parseLeaveFinalAmountPayload(input: string): SubmitFinalChipsRequestDto | null {
@@ -4054,6 +5216,26 @@ function getAppBackFallbackPath(pathname: string): string {
     if (tableId) {
       return getVirtualTableRoute(tableId);
     }
+  }
+
+  if (
+    pathname === "/clubs" ||
+    pathname === getClubsNewRoute() ||
+    pathname.startsWith("/clubs/join/")
+  ) {
+    return getClubRoute();
+  }
+
+  if (/^\/clubs\/[^/]+\/events\/[^/]+$/.test(pathname) || /^\/clubs\/[^/]+\/invite$/.test(pathname)) {
+    const clubId = pathname.split("/")[2];
+
+    if (clubId) {
+      return getClubDashboardRoute(clubId);
+    }
+  }
+
+  if (/^\/clubs\/[^/]+$/.test(pathname)) {
+    return getClubRoute();
   }
 
   if (

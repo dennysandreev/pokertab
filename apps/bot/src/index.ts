@@ -3,8 +3,11 @@ import { createServer } from "node:http";
 
 const ROOM_START_PARAM_PREFIX = "room_";
 const VIRTUAL_TABLE_START_PARAM_PREFIX = "virtual_table_";
+const CLUB_START_PARAM_PREFIX = "club_";
+const CLUB_EVENT_RSVP_CALLBACK_PREFIX = "club_event_rsvp:";
 const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
 const TELEGRAM_POLL_TIMEOUT_SECONDS = 25;
+export const TELEGRAM_ALLOWED_UPDATES = ["message", "callback_query"] as const;
 
 export type BotStatus = {
   ok: true;
@@ -34,6 +37,59 @@ export type VirtualTableTimeoutNotificationParams = VirtualTableNotificationPara
   actionLabel: string;
 };
 
+export type ClubEventRsvpStatus = "GOING" | "MAYBE" | "DECLINED";
+
+export type ClubEventRsvpCallback = {
+  eventId: string;
+  status: ClubEventRsvpStatus;
+};
+
+export type ClubTelegramNotificationPayload = {
+  text: string;
+  reply_markup: {
+    inline_keyboard: Array<
+      Array<
+        | {
+            text: string;
+            callback_data: string;
+          }
+        | {
+            text: string;
+            web_app: {
+              url: string;
+            };
+          }
+      >
+    >;
+  };
+};
+
+export type OfflineClubEventNotificationParams = {
+  clubName: string;
+  eventId: string;
+  title: string;
+  scheduledLabel: string;
+  location: string;
+  buyIn: string;
+  miniAppUrl: string;
+};
+
+export type OnlineClubEventNotificationParams = {
+  clubName: string;
+  eventId: string;
+  title: string;
+  scheduledLabel: string;
+  gameLabel: string;
+  stackLabel: string;
+  blindsLabel: string;
+  miniAppUrl: string;
+};
+
+export type ClubTelegramRsvpApiResult = {
+  status: "success" | "waitlist" | "cancelled" | "non-member";
+  message?: string | null;
+};
+
 type TelegramUpdate = {
   update_id: number;
   message?: {
@@ -42,6 +98,15 @@ type TelegramUpdate = {
     };
     text?: string;
   };
+  callback_query?: TelegramCallbackQuery;
+};
+
+type TelegramCallbackQuery = {
+  id: string;
+  from: {
+    id: number;
+  };
+  data?: string;
 };
 
 type TelegramApiResponse<T> = {
@@ -96,6 +161,13 @@ export function buildVirtualTableInviteDeepLink(
   inviteCode: string
 ): string {
   return `https://t.me/${botUsername}/app?startapp=${VIRTUAL_TABLE_START_PARAM_PREFIX}${inviteCode}`;
+}
+
+export function buildClubInviteDeepLink(
+  botUsername: string,
+  inviteCode: string
+): string {
+  return `https://t.me/${botUsername}/app?startapp=${CLUB_START_PARAM_PREFIX}${inviteCode}`;
 }
 
 export function buildVirtualTableInviteMessage({
@@ -159,6 +231,124 @@ export function buildVirtualTableStartResponse(
     button: {
       text: "Открыть стол",
       url: miniAppUrl
+    }
+  };
+}
+
+export function buildClubEventRsvpCallbackData(
+  eventId: string,
+  status: ClubEventRsvpStatus
+): string {
+  return `${CLUB_EVENT_RSVP_CALLBACK_PREFIX}${eventId}:${status}`;
+}
+
+export function parseClubEventRsvpCallback(
+  data: string
+): ClubEventRsvpCallback | null {
+  const match = data.match(/^club_event_rsvp:([^:]+):(GOING|MAYBE|DECLINED)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    eventId: match[1] ?? "",
+    status: match[2] as ClubEventRsvpStatus
+  };
+}
+
+export function buildOfflineClubEventNotificationPayload({
+  clubName,
+  eventId,
+  title,
+  scheduledLabel,
+  location,
+  buyIn,
+  miniAppUrl
+}: OfflineClubEventNotificationParams): ClubTelegramNotificationPayload {
+  return {
+    text: [
+      `🃏 Новая игра в клубе ${clubName}`,
+      "",
+      title,
+      scheduledLabel,
+      `Место: ${location}`,
+      `Ребай: ${buyIn}`,
+      "",
+      "Вы придете?"
+    ].join("\n"),
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "✅ Приду",
+            callback_data: buildClubEventRsvpCallbackData(eventId, "GOING")
+          },
+          {
+            text: "❓ Возможно",
+            callback_data: buildClubEventRsvpCallbackData(eventId, "MAYBE")
+          },
+          {
+            text: "❌ Не смогу",
+            callback_data: buildClubEventRsvpCallbackData(eventId, "DECLINED")
+          }
+        ],
+        [
+          {
+            text: "Открыть мероприятие",
+            web_app: {
+              url: miniAppUrl
+            }
+          }
+        ]
+      ]
+    }
+  };
+}
+
+export function buildOnlineClubEventNotificationPayload({
+  clubName,
+  eventId,
+  title,
+  scheduledLabel,
+  gameLabel,
+  stackLabel,
+  blindsLabel,
+  miniAppUrl
+}: OnlineClubEventNotificationParams): ClubTelegramNotificationPayload {
+  return {
+    text: [
+      `♠️ Запланирован онлайн-стол в клубе ${clubName}`,
+      "",
+      title,
+      `Старт: ${scheduledLabel}`,
+      gameLabel,
+      `Стек: ${stackLabel}`,
+      `Блайнды: ${blindsLabel}`,
+      "",
+      "Будете играть?"
+    ].join("\n"),
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "✅ Играю",
+            callback_data: buildClubEventRsvpCallbackData(eventId, "GOING")
+          },
+          {
+            text: "❌ Не смогу",
+            callback_data: buildClubEventRsvpCallbackData(eventId, "DECLINED")
+          }
+        ],
+        [
+          {
+            text: "Открыть стол",
+            web_app: {
+              url: miniAppUrl
+            }
+          }
+        ]
+      ]
     }
   };
 }
@@ -264,7 +454,7 @@ async function pollTelegram(token: string, miniAppUrl: string): Promise<void> {
       const updates = await telegramRequest<TelegramUpdate[]>(token, "getUpdates", {
         offset,
         timeout: TELEGRAM_POLL_TIMEOUT_SECONDS,
-        allowed_updates: ["message"]
+        allowed_updates: TELEGRAM_ALLOWED_UPDATES
       });
 
       for (const update of updates) {
@@ -284,6 +474,12 @@ async function handleUpdate(
   update: TelegramUpdate
 ): Promise<void> {
   const message = update.message;
+  const callbackQuery = update.callback_query;
+
+  if (callbackQuery) {
+    await handleCallbackQuery(token, callbackQuery);
+    return;
+  }
 
   if (!message) {
     return;
@@ -309,6 +505,31 @@ async function handleUpdate(
           ]
         }
       : undefined
+  });
+}
+
+export async function handleCallbackQuery(
+  token: string,
+  callbackQuery: TelegramCallbackQuery
+): Promise<void> {
+  const callbackData = callbackQuery.data?.trim() ?? "";
+  const parsedCallback = parseClubEventRsvpCallback(callbackData);
+
+  if (!parsedCallback) {
+    return;
+  }
+
+  const result = await submitClubEventRsvp({
+    apiBaseUrl: getApiBaseUrl(),
+    botToken: token,
+    eventId: parsedCallback.eventId,
+    telegramId: callbackQuery.from.id,
+    status: parsedCallback.status
+  });
+
+  await telegramRequest(token, "answerCallbackQuery", {
+    callback_query_id: callbackQuery.id,
+    text: buildClubEventRsvpAnswerText(result, parsedCallback.status)
   });
 }
 
@@ -349,6 +570,78 @@ async function telegramRequest<T>(
   return body.result as T;
 }
 
+export function buildClubEventRsvpAnswerText(
+  result: ClubTelegramRsvpApiResult,
+  requestedStatus: ClubEventRsvpStatus
+): string {
+  const message = result.message?.trim();
+
+  if (message) {
+    return message;
+  }
+
+  switch (result.status) {
+    case "success":
+      return `Готово. Ваш ответ: ${getRsvpStatusLabel(requestedStatus)}.`;
+    case "waitlist":
+      return "Места закончились. Вы добавлены в лист ожидания.";
+    case "cancelled":
+      return "Мероприятие отменено.";
+    case "non-member":
+      return "Вы не являетесь участником этого клуба.";
+  }
+}
+
+export function getApiBaseUrl(): string {
+  const apiUrl = process.env.API_URL?.trim();
+
+  if (apiUrl) {
+    return apiUrl;
+  }
+
+  const webAppUrl = process.env.WEB_APP_URL?.trim();
+
+  if (!webAppUrl) {
+    return "https://pokertab.ru";
+  }
+
+  try {
+    return new URL(webAppUrl).origin;
+  } catch {
+    return webAppUrl;
+  }
+}
+
+export async function submitClubEventRsvp(params: {
+  apiBaseUrl: string;
+  botToken: string;
+  eventId: string;
+  telegramId: number;
+  status: ClubEventRsvpStatus;
+}): Promise<ClubTelegramRsvpApiResult> {
+  const response = await fetch(new URL("/api/clubs/telegram/rsvp", params.apiBaseUrl), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-telegram-bot-token": params.botToken
+    },
+    body: JSON.stringify({
+      eventId: params.eventId,
+      telegramId: params.telegramId,
+      status: params.status
+    })
+  });
+  const body = (await response.json()) as ClubTelegramRsvpApiResult & {
+    error?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(body.message?.trim() || body.error || "Club RSVP request failed");
+  }
+
+  return body;
+}
+
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
 
@@ -367,6 +660,17 @@ function delay(ms: number): Promise<void> {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
+}
+
+function getRsvpStatusLabel(status: ClubEventRsvpStatus): string {
+  switch (status) {
+    case "GOING":
+      return "Приду";
+    case "MAYBE":
+      return "Возможно";
+    case "DECLINED":
+      return "Не смогу";
+  }
 }
 
 function getVirtualTableInviteCodeFromCommand(text: string): string | null {

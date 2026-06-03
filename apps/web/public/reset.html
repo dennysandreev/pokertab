@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Обновляем Poker Table</title>
+    <style>
+      body {
+        margin: 0;
+        background: #080a09;
+        color: #f4f7f5;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        box-sizing: border-box;
+        display: grid;
+        min-height: 100vh;
+        place-items: center;
+        padding: 24px;
+        text-align: center;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.1;
+      }
+
+      p {
+        margin: 12px 0 0;
+        color: #aeb7b1;
+        font-size: 16px;
+        line-height: 1.5;
+      }
+
+      a {
+        color: #78e8af;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <h1>Обновляем приложение</h1>
+        <p id="status">Сейчас откроем свежую версию.</p>
+        <p><a id="link" href="/">Открыть вручную</a></p>
+      </div>
+    </main>
+    <script>
+      (function () {
+        function beacon(stage, extra) {
+          try {
+            var query =
+              "stage=" +
+              encodeURIComponent(stage) +
+              "&t=" +
+              Date.now();
+
+            if (extra) {
+              Object.keys(extra).forEach(function (key) {
+                query +=
+                  "&" +
+                  encodeURIComponent(key) +
+                  "=" +
+                  encodeURIComponent(String(extra[key] == null ? "" : extra[key]).slice(0, 180));
+              });
+            }
+
+            new Image().src = "/client-boot.gif?" + query;
+          } catch (_error) {
+            // Ignore diagnostic failures.
+          }
+        }
+
+        function setStatus(text) {
+          document.getElementById("status").textContent = text;
+        }
+
+        var nextUrl = "/?reset=1&from=reset-page&v=" + Date.now();
+        document.getElementById("link").href = nextUrl;
+        beacon("reset-page-start");
+
+        try {
+          window.localStorage && window.localStorage.clear();
+          window.sessionStorage && window.sessionStorage.clear();
+          beacon("reset-page-storage-ok");
+        } catch (error) {
+          beacon("reset-page-storage-error", { message: error && error.message });
+        }
+
+        Promise.resolve()
+          .then(function () {
+            if (!("caches" in window)) {
+              return;
+            }
+
+            return window.caches.keys().then(function (keys) {
+              return Promise.all(
+                keys.map(function (key) {
+                  return window.caches.delete(key);
+                })
+              );
+            });
+          })
+          .then(function () {
+            beacon("reset-page-caches-ok");
+          })
+          .catch(function (error) {
+            beacon("reset-page-caches-error", { message: error && error.message });
+          })
+          .then(function () {
+            if (!("serviceWorker" in navigator)) {
+              return;
+            }
+
+            return navigator.serviceWorker.getRegistrations().then(function (registrations) {
+              return Promise.all(
+                registrations.map(function (registration) {
+                  return registration.unregister();
+                })
+              );
+            });
+          })
+          .then(function () {
+            beacon("reset-page-sw-ok");
+            setStatus("Готово, открываем свежую версию.");
+            window.setTimeout(function () {
+              window.location.replace(nextUrl);
+            }, 350);
+          })
+          .catch(function (error) {
+            beacon("reset-page-sw-error", { message: error && error.message });
+            setStatus("Кэш очищен. Нажмите ссылку ниже, если приложение не открылось само.");
+          });
+      })();
+    </script>
+  </body>
+</html>

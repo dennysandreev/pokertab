@@ -20,6 +20,8 @@ import { RoomsService } from "./rooms.service";
 type RoomCreateArgs = {
   data: {
     ownerUserId: string;
+    clubId?: string | null;
+    scheduledStartAt?: Date | null;
     title: string;
     inviteCode: string;
     buyInChips: bigint;
@@ -41,6 +43,7 @@ type RoomPlayerCreateArgs = {
 
 type RoomUpdateArgs = {
   data: Partial<{
+    clubEventId: string | null;
     status: RoomStatus;
     startedAt: Date;
     closedAt: Date;
@@ -197,6 +200,68 @@ describe("RoomsService", () => {
 
     expect(roomCreateArgs?.data.inviteCode).toMatch(/^[A-Z0-9]{8}$/);
     expect(result.room.inviteCode).toMatch(/^[A-Z0-9]{8}$/);
+  });
+
+  it("creates a club event and sends invites when club fields are provided", async () => {
+    const prisma = createPrismaMock();
+    const clubsService = createClubsServiceMock();
+    const room = createRoomRecord({
+      inviteCode: "AB12CD34",
+      clubId: "club-1",
+      scheduledStartAt: new Date("2026-05-24T18:00:00.000Z"),
+      clubEventId: "event-1"
+    });
+
+    prisma.room.create.mockResolvedValue(createRoomRecord({ id: room.id, inviteCode: room.inviteCode }));
+    prisma.room.update.mockResolvedValue(room);
+    prisma.roomPlayer.create.mockResolvedValue(createRoomPlayerRecord());
+    prisma.$transaction.mockImplementation(
+      async (
+        callback: (transaction: Pick<MockPrisma, "room" | "roomPlayer">) => Promise<Room>
+      ) => callback({ room: prisma.room, roomPlayer: prisma.roomPlayer })
+    );
+    clubsService.createEventForRoom.mockResolvedValue("event-1");
+    clubsService.sendEventInvites.mockResolvedValue(undefined);
+
+    const service = new RoomsService(
+      prisma as unknown as PrismaService,
+      undefined,
+      clubsService as never
+    );
+
+    await service.createRoom(baseUser, {
+      ...createRoomInput,
+      clubId: "club-1",
+      scheduledStartAt: "2026-05-24T21:00:00.000+03:00",
+      sendClubInvites: true,
+      maxPlayers: 9,
+      location: "У Дениса"
+    });
+    const roomCreateArgs = prisma.room.create.mock.calls[0]?.[0];
+
+    expect(roomCreateArgs?.data.clubId).toBe("club-1");
+    expect(roomCreateArgs?.data.scheduledStartAt).toEqual(
+      new Date("2026-05-24T18:00:00.000Z")
+    );
+    expect(clubsService.createEventForRoom).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        clubId: "club-1",
+        createdByUserId: baseUser.id,
+        offlineRoomId: room.id,
+        maxPlayers: 9,
+        location: "У Дениса"
+      })
+    );
+    expect(prisma.room.update).toHaveBeenCalledWith({
+      where: {
+        id: room.id
+      },
+      data: {
+        clubEventId: "event-1"
+      }
+    });
+    expect(clubsService.sendEventInvites).toHaveBeenCalledWith("event-1", "club-1");
   });
 
   it("rejects too long room title", async () => {
@@ -2067,6 +2132,13 @@ function createPrismaMock(): MockPrisma {
   };
 }
 
+function createClubsServiceMock() {
+  return {
+    createEventForRoom: jest.fn(),
+    sendEventInvites: jest.fn()
+  };
+}
+
 function createRoomRecord(
   overrides: Partial<
     Room & {
@@ -2087,6 +2159,9 @@ function createRoomRecord(
   return {
     id: "room-1",
     ownerUserId: baseUser.id,
+    clubId: null,
+    clubEventId: null,
+    scheduledStartAt: null,
     title: "Покер у Дениса",
     currency: "RUB",
     buyInChips: 10000n,

@@ -68,7 +68,6 @@ export function VirtualActionControls({
     !controlsModel.foldButton &&
     !controlsModel.primaryButton &&
     !controlsModel.raiseButton &&
-    !controlsModel.secondaryButton &&
     !sizingControl
   ) {
     return null;
@@ -77,35 +76,11 @@ export function VirtualActionControls({
   return (
     <>
       <section
-        className="border-t border-white/12 bg-[#121212]/98 px-3.5 pb-3 pt-2.5 shadow-[0_-18px_34px_rgba(0,0,0,0.42)] backdrop-blur-xl rounded-t-[1.55rem]"
+        className="px-3 pb-3 pt-2"
         data-testid="virtual-action-panel"
       >
-        {controlsModel.secondaryButton ? (
-          <div className="mb-2" data-testid="virtual-action-all-in-pill">
-            <button
-              className={cn(
-                "inline-flex min-h-8 items-center justify-center rounded-full border border-[#f1d8ea]/40 bg-[#2a1d28] px-3 py-1.5 text-[12px] font-semibold text-[#ffe7f5] transition hover:bg-[#342330]",
-                disabled && "cursor-not-allowed opacity-60"
-              )}
-              disabled={disabled}
-              onClick={() => {
-                const button = controlsModel.secondaryButton;
-
-                if (!button) {
-                  return;
-                }
-
-                void onSubmitAction(buildActionPayload(hand.id, button.actionType, button.amountChips));
-              }}
-              type="button"
-            >
-              All-in
-            </button>
-          </div>
-        ) : null}
-
         <div
-          className="mt-2.5 grid grid-cols-[1fr_1.45fr_1fr] gap-2.5"
+          className="grid grid-cols-[0.94fr_1.22fr_0.94fr] gap-2"
           data-testid="virtual-action-buttons"
         >
           <ActionBarButton
@@ -274,13 +249,20 @@ function ActionBarButton({
   onClick: () => void;
   primary?: boolean;
 }): JSX.Element {
+  const isDanger = button?.actionType === "FOLD" || fallbackLabel === "Пас";
+  const shouldShowAmount =
+    Boolean(button?.amountChips) &&
+    (button?.actionType === "CALL" || button?.actionType === "BET" || button?.actionType === "RAISE");
+
   return (
     <button
       className={cn(
-        "min-h-[4.4rem] rounded-[1.2rem] border px-3 py-2.5 text-center transition",
+        "min-h-[4.1rem] rounded-[1.1rem] border px-3 py-2 text-center transition",
         primary
-          ? "border-[#4edea3]/45 bg-[#4edea3] text-[#022818] shadow-[0_14px_28px_rgba(78,222,163,0.2)]"
-          : "border-white/70 bg-[#242424] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:bg-[#2b2b2b]",
+          ? "border-[#4ee08f]/55 bg-[#47d97f] text-[#032312] shadow-[0_14px_28px_rgba(71,217,127,0.22)] hover:bg-[#53e58a]"
+          : isDanger
+            ? "border-[#ff7a7a]/28 bg-[#9f3232] text-white shadow-[0_10px_24px_rgba(116,15,15,0.24)] hover:bg-[#b33a3a]"
+            : "border-white/12 bg-[rgba(29,33,31,0.92)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:bg-[rgba(38,42,40,0.96)]",
         !button && "opacity-40",
         disabled && "cursor-not-allowed opacity-60"
       )}
@@ -292,11 +274,22 @@ function ActionBarButton({
       <span
         className={cn(
           "block font-semibold leading-tight",
-          primary ? "text-[0.88rem]" : "text-[0.95rem]"
+          primary ? "text-[0.9rem]" : "text-[0.92rem]"
         )}
       >
         {button?.label ?? fallbackLabel}
       </span>
+      {shouldShowAmount ? (
+        <span
+          className={cn(
+            "mt-1 block font-semibold leading-none",
+            primary ? "text-[1.1rem] text-[#052817]" : "text-[1rem] text-white"
+          )}
+          data-testid={`${testId}-amount`}
+        >
+          {formatChips(button?.amountChips ?? "")}
+        </span>
+      ) : null}
     </button>
   );
 }

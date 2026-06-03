@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  cancelClubEvent,
   createRoom,
+  createClub,
   createVirtualTable,
+  createClubInviteLink,
+  getClub,
+  getClubEvent,
+  getClubEvents,
+  getClubJoinPreview,
+  getClubMembers,
+  getClubs,
   getMyVirtualStats,
   getRooms,
   getVirtualHandHistories,
@@ -10,10 +19,12 @@ import {
   getVirtualPlayerProfile,
   getVirtualTable,
   getVirtualTables,
+  joinClub,
   joinVirtualTable,
   pauseVirtualTable,
   raiseVirtualBlinds,
   requestVirtualSitOut,
+  resolveInviteCode,
   resumeVirtualTable,
   returnToVirtualTable,
   startNextVirtualHand,
@@ -21,7 +32,11 @@ import {
   submitVirtualReaction,
   submitVirtualAction,
   finishVirtualTable,
-  cancelVirtualTable
+  cancelVirtualTable,
+  sendClubEventReminder,
+  updateClub,
+  updateClubEventRsvp,
+  updateClubMember
 } from "./api";
 
 function createJsonResponse(body: unknown, init: { ok: boolean; status: number }): Response {
@@ -150,6 +165,27 @@ describe("apiRequest", () => {
     expect(headers.Pragma).toBe("no-cache");
   });
 
+  it("resolves a universal invite code with expected path and method", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() =>
+        Promise.resolve(createJsonResponse({ kind: "ROOM", inviteCode: "AB12CD34" }, { ok: true, status: 200 }))
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(resolveInviteCode("token", { inviteCode: "AB12CD34" })).resolves.toEqual({
+      kind: "ROOM",
+      inviteCode: "AB12CD34"
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+
+    expect(url).toBe("http://localhost:3000/api/invites/resolve");
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(JSON.stringify({ inviteCode: "AB12CD34" }));
+  });
+
   it("uses top-level message string from a non-envelope error response", async () => {
     vi.stubGlobal(
       "fetch",
@@ -188,5 +224,68 @@ describe("apiRequest", () => {
         message: "Название уже занято",
         status: 422
       });
+  });
+
+  it("calls club API endpoints with expected paths and methods", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() => Promise.resolve(createJsonResponse({}, { ok: true, status: 200 })));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getClubs("token");
+    await createClub("token", {
+      name: "Friday Club",
+      description: "Home games",
+      defaultCurrency: "RUB"
+    });
+    await getClub("token", "club-1");
+    await updateClub("token", "club-1", {
+      name: "Friday Club"
+    });
+    await getClubJoinPreview("token", "INV123");
+    await joinClub("token", "club-1", {
+      inviteCode: "INV123"
+    });
+    await getClubMembers("token", "club-1");
+    await createClubInviteLink("token", "club-1");
+    await updateClubMember("token", "club-1", "member-1", {
+      role: "ADMIN"
+    });
+    await getClubEvents("token", "club-1", {
+      type: "offline",
+      status: "upcoming"
+    });
+    await getClubEvent("token", "club-1", "event-1");
+    await updateClubEventRsvp("token", "club-1", "event-1", {
+      status: "GOING"
+    });
+    await sendClubEventReminder("token", "club-1", "event-1");
+    await cancelClubEvent("token", "club-1", "event-1", {
+      reason: "Перенос"
+    });
+
+    expect(
+      fetchMock.mock.calls.map((call) => {
+        const [url, init] = call;
+
+        return [url, init?.method ?? "GET"];
+      })
+    ).toEqual([
+      ["http://localhost:3000/api/clubs", "GET"],
+      ["http://localhost:3000/api/clubs", "POST"],
+      ["http://localhost:3000/api/clubs/club-1", "GET"],
+      ["http://localhost:3000/api/clubs/club-1", "PATCH"],
+      ["http://localhost:3000/api/clubs/invites/INV123", "GET"],
+      ["http://localhost:3000/api/clubs/club-1/join", "POST"],
+      ["http://localhost:3000/api/clubs/club-1/members", "GET"],
+      ["http://localhost:3000/api/clubs/club-1/invite-link", "POST"],
+      ["http://localhost:3000/api/clubs/club-1/members/member-1", "PATCH"],
+      ["http://localhost:3000/api/clubs/club-1/events?type=offline&status=upcoming", "GET"],
+      ["http://localhost:3000/api/clubs/club-1/events/event-1", "GET"],
+      ["http://localhost:3000/api/clubs/club-1/events/event-1/rsvp", "PATCH"],
+      ["http://localhost:3000/api/clubs/club-1/events/event-1/remind", "POST"],
+      ["http://localhost:3000/api/clubs/club-1/events/event-1/cancel", "PATCH"]
+    ]);
   });
 });

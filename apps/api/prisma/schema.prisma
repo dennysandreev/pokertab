@@ -28,6 +28,10 @@ model User {
   virtualSeats          VirtualSeat[]
   virtualTableReactions VirtualTableReaction[]
   onlinePlayerStats     OnlinePlayerStats?
+  ownedClubs            Club[]           @relation("ClubOwner")
+  clubMemberships       ClubMember[]
+  createdClubEvents     ClubEvent[]      @relation("ClubEventCreatedBy")
+  clubEventRsvps        ClubEventRsvp[]
 
   @@index([telegramId])
 }
@@ -35,6 +39,9 @@ model User {
 model Room {
   id               String            @id @default(cuid())
   ownerUserId      String
+  clubId           String?
+  clubEventId      String?           @unique
+  scheduledStartAt DateTime?
   title            String
   currency         String
   buyInChips       BigInt            @default(0)
@@ -54,12 +61,16 @@ model Room {
   cancelledAt      DateTime?
 
   owner           User             @relation("RoomOwner", fields: [ownerUserId], references: [id])
+  club            Club?            @relation(fields: [clubId], references: [id])
+  clubEvent       ClubEvent?       @relation("OfflineRoomClubEvent", fields: [clubEventId], references: [id])
   players         RoomPlayer[]
   rebuyEvents     RebuyEvent[]
   idempotencyKeys IdempotencyKey[]
   settlements     Settlement[]
 
   @@index([ownerUserId])
+  @@index([clubId])
+  @@index([scheduledStartAt])
   @@index([status])
   @@index([inviteCode])
 }
@@ -193,6 +204,9 @@ model PlayerStats {
 model VirtualTable {
   id                     String                @id @default(cuid())
   ownerUserId            String
+  clubId                 String?
+  clubEventId            String?               @unique
+  scheduledStartAt       DateTime?
   title                  String
   maxSeats               Int                   @default(9)
   startingStackChips     BigInt
@@ -215,16 +229,111 @@ model VirtualTable {
   pausedAt               DateTime?
   finishedAt             DateTime?
 
-  owner   User            @relation("VirtualTableOwner", fields: [ownerUserId], references: [id])
-  seats   VirtualSeat[]
-  hands   VirtualHand[]
-  actions VirtualAction[]
+  owner     User                  @relation("VirtualTableOwner", fields: [ownerUserId], references: [id])
+  club      Club?                 @relation(fields: [clubId], references: [id])
+  clubEvent ClubEvent?            @relation("VirtualTableClubEvent", fields: [clubEventId], references: [id])
+  seats     VirtualSeat[]
+  hands     VirtualHand[]
+  actions   VirtualAction[]
   reactions VirtualTableReaction[]
-  timers  TurnTimer[]
+  timers    TurnTimer[]
 
   @@index([ownerUserId])
+  @@index([clubId])
+  @@index([scheduledStartAt])
   @@index([status])
   @@index([inviteCode])
+}
+
+model Club {
+  id              String      @id @default(cuid())
+  ownerUserId     String
+  name            String
+  description     String?
+  privacy         ClubPrivacy @default(PRIVATE_INVITE_ONLY)
+  defaultCurrency String?
+  inviteCode      String      @unique
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  owner         User            @relation("ClubOwner", fields: [ownerUserId], references: [id])
+  members       ClubMember[]
+  events        ClubEvent[]
+  rooms         Room[]
+  virtualTables VirtualTable[]
+  rsvps         ClubEventRsvp[]
+
+  @@index([ownerUserId])
+  @@index([inviteCode])
+}
+
+model ClubMember {
+  id         String           @id @default(cuid())
+  clubId      String
+  userId      String
+  role        ClubMemberRole   @default(MEMBER)
+  status      ClubMemberStatus @default(ACTIVE)
+  displayName String?
+  joinedAt    DateTime         @default(now())
+  removedAt   DateTime?
+
+  club Club @relation(fields: [clubId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([clubId, userId])
+  @@index([clubId])
+  @@index([userId])
+  @@index([status])
+}
+
+model ClubEvent {
+  id               String              @id @default(cuid())
+  clubId           String
+  createdByUserId  String
+  type             ClubEventType
+  title            String
+  description      String?
+  scheduledStartAt DateTime
+  timezone         String?
+  status           ClubEventStatus     @default(SCHEDULED)
+  maxPlayers       Int?
+  offlineRoomId    String?             @unique
+  virtualTableId   String?             @unique
+  location         String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  cancelledAt      DateTime?
+
+  club         Club            @relation(fields: [clubId], references: [id])
+  createdByUser User           @relation("ClubEventCreatedBy", fields: [createdByUserId], references: [id])
+  offlineRoom  Room?           @relation("OfflineRoomClubEvent")
+  virtualTable VirtualTable?   @relation("VirtualTableClubEvent")
+  rsvps        ClubEventRsvp[]
+
+  @@index([clubId])
+  @@index([createdByUserId])
+  @@index([status])
+  @@index([scheduledStartAt])
+}
+
+model ClubEventRsvp {
+  id          String               @id @default(cuid())
+  clubEventId String
+  clubId      String
+  userId      String
+  status      ClubEventRsvpStatus  @default(NO_RESPONSE)
+  respondedAt DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  event ClubEvent @relation(fields: [clubEventId], references: [id])
+  club  Club      @relation(fields: [clubId], references: [id])
+  user  User      @relation(fields: [userId], references: [id])
+
+  @@unique([clubEventId, userId])
+  @@index([clubId])
+  @@index([userId])
+  @@index([clubEventId, status])
 }
 
 model VirtualSeat {
@@ -492,6 +601,44 @@ enum SettlementTransferStatus {
   PENDING
   MARKED_PAID
   CANCELLED
+}
+
+enum ClubPrivacy {
+  PRIVATE_INVITE_ONLY
+}
+
+enum ClubMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ClubMemberStatus {
+  ACTIVE
+  REMOVED
+  LEFT
+  INVITED
+}
+
+enum ClubEventType {
+  OFFLINE_POKER
+  ONLINE_TABLE
+}
+
+enum ClubEventStatus {
+  SCHEDULED
+  RSVP_OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ClubEventRsvpStatus {
+  GOING
+  MAYBE
+  DECLINED
+  NO_RESPONSE
+  WAITLIST
 }
 
 enum VirtualTableStatus {

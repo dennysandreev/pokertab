@@ -6,10 +6,11 @@ import type {
   VirtualHandHistoryListItemDto,
   VirtualHandHistoryPotDto
 } from "@pokertable/shared";
+import { CompactGameRow, VisualEmptyState } from "@/components/visual";
 import { Button } from "@/components/ui/button";
+import { resolveMiniAppVisual } from "../visual/mini-app-visuals";
 import {
   AvatarInitials,
-  EmptyState,
   GlassPanel,
   InlineMetric,
   RolePill,
@@ -43,18 +44,19 @@ export function VirtualHandHistoryListScreen({
 }: HandHistoryListScreenProps): JSX.Element {
   return (
     <div className={virtualScreenClassName}>
-      <div className="mx-auto max-w-3xl space-y-6 pb-8">
+      <div className="mx-auto max-w-3xl space-y-4 px-4 pb-8">
         <ScreenHeader
           eyebrow="История раздач"
           title="История раздач"
-          description="Быстрый список по банку, статусу, доске и победителям. Детали открываются без лишнего контекста."
+          description="Банк, доска, победители и ход действий."
           trailing={<RolePill>{data.items.length}</RolePill>}
         />
 
         {data.items.length === 0 ? (
-          <EmptyState
+          <VisualEmptyState
+            compact
             description="Когда в столе завершатся первые раздачи, здесь появится полный лог действий и результатов."
-            icon="history"
+            imageSrc={resolveMiniAppVisual("settlement-history")}
             title="Раздач пока нет"
           />
         ) : (
@@ -211,35 +213,26 @@ function HandHistoryListCard({
   onOpenHand?: (handId: string) => void;
 }): JSX.Element {
   return (
-    <GlassPanel className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <RolePill tone="positive">#{item.handNumber}</RolePill>
-            <RolePill>{getStreetLabel(item.street)}</RolePill>
-          </div>
-          <h3 className="mt-3 text-lg font-semibold text-white">{formatVirtualChips(item.potTotalChips)}</h3>
-        </div>
-        {onOpenHand ? (
-          <Button className="min-h-11 px-4" onClick={() => onOpenHand(item.id)}>
+    <CompactGameRow
+      detail={`${item.actionsCount} действий · ${item.board.length === 0 ? "Префлоп" : item.board.join(" ")}`}
+      imageSrc={resolveMiniAppVisual("settlement-history")}
+      statusLabel={getStreetLabel(item.street)}
+      statusTone="success"
+      subtitle={
+        item.winners.length === 0
+          ? "Без итогов"
+          : item.winners.map((winner) => `${winner.displayName} ${formatVirtualChips(winner.amountChips)}`).join(" · ")
+      }
+      title={`#${item.handNumber}`}
+      trailing={
+        onOpenHand ? (
+          <Button className="min-h-10 px-3" onClick={() => onOpenHand(item.id)}>
             Детали
-            <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
           </Button>
-        ) : null}
-      </div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <InlineMetric label="Экшен" value={`${item.actionsCount} действий`} />
-        <InlineMetric label="Борд" value={item.board.length === 0 ? "Префлоп" : item.board.join(" ")} />
-        <InlineMetric
-          label="Победители"
-          value={
-            item.winners.length === 0
-              ? "Без итогов"
-              : item.winners.map((winner) => `${winner.displayName} ${formatVirtualChips(winner.amountChips)}`).join(" · ")
-          }
-        />
-      </div>
-    </GlassPanel>
+        ) : undefined
+      }
+      value={formatVirtualChips(item.potTotalChips)}
+    />
   );
 }
 

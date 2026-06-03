@@ -51,6 +51,10 @@ export function normalizeCreateVirtualTableRequest(
     "Не удалось определить действие по тайм-ауту"
   ).trim() as VirtualTimeoutAutoActionRule;
   const winProbabilityEnabled = getOptionalBoolean(payload.winProbabilityEnabled) ?? false;
+  const clubId = normalizeNullableString(payload.clubId);
+  const scheduledStartAt = normalizeNullableString(payload.scheduledStartAt);
+  const sendClubInvites = getOptionalBoolean(payload.sendClubInvites) ?? false;
+  const maxPlayers = getOptionalInteger(payload.maxPlayers);
 
   if (turnDurationSeconds <= 0 || reminderDelaySeconds <= 0) {
     throw invalidInput("Время должно быть больше нуля");
@@ -71,7 +75,11 @@ export function normalizeCreateVirtualTableRequest(
     turnDurationSeconds,
     reminderDelaySeconds,
     timeoutAutoActionRule,
-    winProbabilityEnabled
+    winProbabilityEnabled,
+    ...(clubId !== undefined ? { clubId } : {}),
+    ...(scheduledStartAt !== undefined ? { scheduledStartAt } : {}),
+    ...(sendClubInvites ? { sendClubInvites } : {}),
+    ...(maxPlayers !== undefined ? { maxPlayers } : {})
   };
 }
 
@@ -259,6 +267,36 @@ function getOptionalBoolean(value: unknown): boolean | null {
   }
 
   if (typeof value !== "boolean") {
+    throw invalidInput("Некорректные данные стола");
+  }
+
+  return value;
+}
+
+function normalizeNullableString(value: unknown): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw invalidInput("Некорректные данные стола");
+  }
+
+  const normalized = value.trim();
+
+  return normalized.length > 0 ? normalized : null;
+}
+
+function getOptionalInteger(value: unknown): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value)) {
     throw invalidInput("Некорректные данные стола");
   }
 

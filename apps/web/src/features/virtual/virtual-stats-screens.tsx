@@ -5,10 +5,11 @@ import type {
   VirtualLeaderboardItemDto,
   VirtualOnlineStatsDto
 } from "@pokertable/shared";
+import { CompactGameRow, VisualEmptyState } from "@/components/visual";
 import { Button } from "@/components/ui/button";
+import { resolveMiniAppVisual } from "../visual/mini-app-visuals";
 import {
   AvatarInitials,
-  EmptyState,
   GlassPanel,
   InlineMetric,
   RolePill,
@@ -47,17 +48,18 @@ export function VirtualLeaderboardScreen({
 }: VirtualLeaderboardScreenProps): JSX.Element {
   return (
     <div className={virtualScreenClassName}>
-      <div className="mx-auto max-w-3xl space-y-6 pb-8">
+      <div className="mx-auto max-w-3xl space-y-4 px-4 pb-8">
         <ScreenHeader
           eyebrow="Онлайн-рейтинг"
           title="Лидерборд"
-          description="Сравниваем игроков по чистому результату, проценту побед, ББ/100 и очкам за онлайн-игру."
+          description="Игроки по результату, победам, ББ/100 и очкам."
         />
 
         {data.items.length === 0 ? (
-          <EmptyState
+          <VisualEmptyState
+            compact
             description="Как только накопятся завершенные онлайн-сессии, рейтинг заполнится автоматически."
-            icon="social_leaderboard"
+            imageSrc={resolveMiniAppVisual("leaderboard")}
             title="Рейтинг пока пустой"
           />
         ) : (
@@ -100,11 +102,11 @@ export function VirtualStatsScreen({
 
   return (
     <div className={virtualScreenClassName}>
-      <div className="mx-auto max-w-3xl space-y-6 pb-8">
+      <div className="mx-auto max-w-3xl space-y-4 px-4 pb-8">
         <ScreenHeader
           eyebrow="Профиль игрока"
           title={stats.displayName}
-          description="Онлайн-метрики по виртуальным столам: результат, дистанция, стабильность и темп набора BB."
+          description="Результат, дистанция и темп набора BB."
           trailing={<RolePill tone="positive">Очки {stats.onlinePokerScore}</RolePill>}
         />
 
@@ -167,15 +169,15 @@ export function VirtualStatsScreen({
             </div>
             <div className="space-y-3">
               {recentTables.map((table) => (
-                <GlassPanel key={table.id} className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-white">{table.title}</p>
-                    <p className="mt-1 text-sm text-[#8e9192]">{table.finishedAt ? formatDate(table.finishedAt) : "Еще в игре"}</p>
-                  </div>
-                  <span className={getVirtualResultTone(table.netChips) === "negative" ? "text-[#ffb4ab]" : "text-[#4edea3]"}>
-                    {formatVirtualSignedChips(table.netChips)}
-                  </span>
-                </GlassPanel>
+                <CompactGameRow
+                  key={table.id}
+                  detail={table.finishedAt ? formatDate(table.finishedAt) : "Еще в игре"}
+                  imageSrc={resolveMiniAppVisual("settlement-history")}
+                  statusLabel="Стол"
+                  statusTone={getVirtualResultTone(table.netChips) === "negative" ? "warning" : "success"}
+                  title={table.title}
+                  value={formatVirtualSignedChips(table.netChips)}
+                />
               ))}
             </div>
           </SectionStack>

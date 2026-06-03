@@ -1,4 +1,5 @@
 import type { RebuyPermission } from "@pokertable/shared";
+import { buildOffsetDateTimeString } from "../clubs/club-view";
 
 export const ROOM_TITLE_MAX_LENGTH = 80;
 export const ROOM_SUPPORTED_CURRENCIES = ["RUB", "USD", "EUR"] as const;
@@ -14,6 +15,11 @@ export type CreateRoomPayload = {
   chipsPerCurrencyUnit: string;
   gameType: "SIMPLE_TRACKING";
   rebuyPermission: RebuyPermission;
+  clubId?: string;
+  scheduledStartAt?: string;
+  sendNotifications?: boolean;
+  maxPlayers?: number;
+  location?: string;
 };
 
 export type CreateRoomFormValues = {
@@ -23,6 +29,11 @@ export type CreateRoomFormValues = {
   rebuyChips: string;
   chipsPerCurrencyUnit: string;
   rebuyPermission: RebuyPermission;
+  clubId?: string;
+  scheduledStartAt?: string;
+  sendNotifications?: boolean;
+  maxPlayers?: string;
+  location?: string;
 };
 
 export function buildCreateRoomPayload(
@@ -33,6 +44,11 @@ export function buildCreateRoomPayload(
   const buyInChips = parsePositiveInteger(values.buyInChips);
   const rebuyChips = parsePositiveInteger(values.rebuyChips);
   const chipsPerCurrencyUnit = parsePositiveInteger(values.chipsPerCurrencyUnit);
+  const clubId = (values.clubId ?? "").trim();
+  const scheduledStartAt = buildOffsetDateTimeString(values.scheduledStartAt ?? "");
+  const maxPlayersInput = values.maxPlayers ?? "";
+  const maxPlayers = maxPlayersInput.trim().length > 0 ? parsePositiveInteger(maxPlayersInput) : null;
+  const location = (values.location ?? "").trim();
 
   if (
     title.length === 0 ||
@@ -46,6 +62,14 @@ export function buildCreateRoomPayload(
     return null;
   }
 
+  if (clubId.length > 0 && !scheduledStartAt) {
+    return null;
+  }
+
+  if (maxPlayersInput.trim().length > 0 && maxPlayers === null) {
+    return null;
+  }
+
   if (
     buyInChips > ROOM_MAX_BUY_IN_CHIPS ||
     rebuyChips > ROOM_MAX_REBUY_CHIPS ||
@@ -54,7 +78,7 @@ export function buildCreateRoomPayload(
     return null;
   }
 
-  return {
+  const payload: CreateRoomPayload = {
     title,
     currency,
     buyInChips: String(buyInChips),
@@ -63,6 +87,21 @@ export function buildCreateRoomPayload(
     gameType: "SIMPLE_TRACKING",
     rebuyPermission: values.rebuyPermission
   };
+
+  if (clubId.length > 0) {
+    payload.clubId = clubId;
+    payload.scheduledStartAt = scheduledStartAt!;
+    payload.sendNotifications = values.sendNotifications ?? false;
+
+    if (maxPlayers !== null) {
+      payload.maxPlayers = maxPlayers;
+    }
+
+    if (location.length > 0) {
+      payload.location = location;
+    }
+  }
+  return payload;
 }
 
 export function getCreateRoomValidationMessage(values: CreateRoomFormValues): string | null {
@@ -71,6 +110,10 @@ export function getCreateRoomValidationMessage(values: CreateRoomFormValues): st
   const buyInChips = parsePositiveInteger(values.buyInChips);
   const rebuyChips = parsePositiveInteger(values.rebuyChips);
   const chipsPerCurrencyUnit = parsePositiveInteger(values.chipsPerCurrencyUnit);
+  const clubId = (values.clubId ?? "").trim();
+  const scheduledStartAt = values.scheduledStartAt ?? "";
+  const maxPlayersInput = values.maxPlayers ?? "";
+  const hasSelectedClub = clubId.length > 0;
 
   if (title.length === 0) {
     return "Укажите название игры";
@@ -110,6 +153,14 @@ export function getCreateRoomValidationMessage(values: CreateRoomFormValues): st
 
   if (rebuyChips > ROOM_MAX_REBUY_CHIPS) {
     return "Ребай слишком большой";
+  }
+
+  if (hasSelectedClub && !buildOffsetDateTimeString(scheduledStartAt)) {
+    return "Выберите дату и время";
+  }
+
+  if (maxPlayersInput.trim().length > 0 && parsePositiveInteger(maxPlayersInput) === null) {
+    return "Лимит игроков должен быть больше нуля";
   }
 
   return null;

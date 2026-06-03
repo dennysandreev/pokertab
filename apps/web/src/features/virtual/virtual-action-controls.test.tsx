@@ -45,7 +45,7 @@ describe("virtual action controls", () => {
     expect(markup).not.toContain("-subtext");
   });
 
-  it("renders call and raise without amount labels on the buttons and all-in pill without amount", () => {
+  it("renders call amount under the call label and keeps all-in out of the panel", () => {
     const markup = renderControls({
       ...baseHand,
       callAmountChips: "200",
@@ -58,9 +58,11 @@ describe("virtual action controls", () => {
     });
 
     expect(markup).toContain("Колл");
+    expect(markup).toContain('data-testid="virtual-action-button-primary-amount"');
+    expect(markup).toContain("200");
     expect(markup).toContain("Повысить");
-    expect(markup).toContain('data-testid="virtual-action-all-in-pill"');
-    expect(markup).toContain("All-in");
+    expect(markup).not.toContain('data-testid="virtual-action-all-in-pill"');
+    expect(markup).not.toContain("All-in");
     expect(markup).not.toContain("4 200");
   });
 
@@ -100,7 +102,7 @@ describe("virtual action controls", () => {
     expect(markup).not.toContain("Закрыть подбор ставки");
   });
 
-  it("uses the reference-like big three-button structure and visual class markers", () => {
+  it("uses a transparent overlay with the reference-like three-button structure", () => {
     const markup = renderControls({
       ...baseHand,
       myLegalActions: [
@@ -113,16 +115,36 @@ describe("virtual action controls", () => {
     expect(markup).toContain('data-testid="virtual-action-button-side-left"');
     expect(markup).toContain('data-testid="virtual-action-button-primary"');
     expect(markup).toContain('data-testid="virtual-action-button-side-right"');
-    expect(markup).toContain("grid-cols-[1fr_1.45fr_1fr]");
-    expect(markup).toContain("rounded-t-[1.55rem]");
-    expect(markup).toContain("min-h-[4.4rem]");
-    expect(markup).toContain("rounded-[1.2rem]");
-    expect(markup).toContain("border-white/70 bg-[#242424]");
-    expect(markup).toContain("bg-[#4edea3] text-[#022818]");
+    expect(markup).toContain('data-testid="virtual-action-button-primary-amount"');
+    expect(markup).toContain("grid-cols-[0.94fr_1.22fr_0.94fr]");
+    expect(markup).toContain("px-3 pb-3 pt-2");
+    expect(markup).not.toContain("bg-[rgba(11,14,13,0.82)]");
+    expect(markup).toContain("min-h-[4.1rem]");
+    expect(markup).toContain("rounded-[1.1rem]");
+    expect(markup).toContain("bg-[rgba(29,33,31,0.92)]");
+    expect(markup).toContain("bg-[#47d97f] text-[#032312]");
     expect(markup).not.toContain("-subtext");
   });
 
-  it("keeps the all-in pill compact and outlined", () => {
+  it("renders fold as danger, call as primary green, and raise as dark action", () => {
+    const markup = renderControls({
+      ...baseHand,
+      myLegalActions: [
+        { type: "FOLD" },
+        { type: "CALL", amountChips: "50" },
+        { type: "RAISE", minAmountChips: "150", maxAmountChips: "9950" }
+      ]
+    });
+
+    expect(markup).toContain("bg-[#9f3232] text-white");
+    expect(markup).toContain("bg-[#47d97f] text-[#032312]");
+    expect(markup).toContain("bg-[rgba(29,33,31,0.92)] text-white");
+    expect(markup).toContain('data-testid="virtual-action-button-primary-amount"');
+    expect(markup).toContain("50");
+    expect(markup).not.toContain("4 200");
+  });
+
+  it("keeps all-in out of the lower panel", () => {
     const markup = renderControls({
       ...baseHand,
       myLegalActions: [
@@ -133,9 +155,9 @@ describe("virtual action controls", () => {
       ]
     });
 
-    expect(markup).toContain('data-testid="virtual-action-all-in-pill"');
-    expect(markup).toContain("rounded-full border border-[#f1d8ea]/40 bg-[#2a1d28]");
-    expect(markup).toContain("All-in");
+    expect(markup).not.toContain('data-testid="virtual-action-all-in-pill"');
+    expect(markup).not.toContain("All-in");
     expect(markup).not.toContain("9 950");
+    expect(markup).not.toContain("Ставка");
   });
 });

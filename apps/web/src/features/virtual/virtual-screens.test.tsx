@@ -87,9 +87,12 @@ const finishedTableData: GetVirtualTableResponseDto = {
       id: "seat-1",
       userId: "user-1",
       displayName: "Denis Andreev",
+      avatarUrl: null,
       seatNumber: 1,
       role: "OWNER",
       stackChips: "4200",
+      committedStreetChips: "0",
+      committedTotalChips: "0",
       status: "ACTIVE",
       isDealer: false,
       isSmallBlind: false,
@@ -100,9 +103,12 @@ const finishedTableData: GetVirtualTableResponseDto = {
       id: "seat-2",
       userId: "user-2",
       displayName: "Alex Blue",
+      avatarUrl: null,
       seatNumber: 2,
       role: "PLAYER",
       stackChips: "5800",
+      committedStreetChips: "0",
+      committedTotalChips: "0",
       status: "ACTIVE",
       isDealer: true,
       isSmallBlind: true,
@@ -156,16 +162,86 @@ describe("virtual screens", () => {
     expect(markup).toContain("Введите 8-символьный код приглашения");
     expect(markup).toContain("Войти за стол");
     expect(markup).toContain("AB12CD34");
+    expect(markup).toContain('src="/visuals/join-code.svg"');
   });
 
-  it("renders compact lobby without the old top header and paginates recent tables by five", () => {
+  it("renders lobby hero and paginates recent tables by five", () => {
     const recentTables = Array.from({ length: RECENT_TABLES_PAGE_SIZE + 1 }, (_, index) => buildListItem(index + 1));
     const markup = renderToStaticMarkup(
       <VirtualLobbyScreen
         activeTables={[]}
         joinCode=""
         myTables={recentTables}
+        nearestEvent={{
+          club: {
+            id: "club-1",
+            ownerUserId: "user-1",
+            name: "Poker Club Denis",
+            privacy: "PRIVATE_INVITE_ONLY",
+            inviteCode: "CLUB2026",
+            createdAt: "2026-05-01T00:00:00.000Z",
+            updatedAt: "2026-05-01T00:00:00.000Z"
+          },
+          event: {
+            id: "event-1",
+            clubId: "club-1",
+            createdByUserId: "user-1",
+            type: "ONLINE_TABLE",
+            title: "Sunday Online",
+            scheduledStartAt: "2026-05-24T18:00:00.000Z",
+            status: "RSVP_OPEN",
+            maxPlayers: 9,
+            myRsvpStatus: "GOING",
+            createdAt: "2026-05-01T00:00:00.000Z",
+            updatedAt: "2026-05-01T00:00:00.000Z",
+            rsvpSummary: {
+              goingCount: 6
+            }
+          }
+        }}
         recentTables={recentTables}
+        waitingTables={[]}
+        onCreateTable={vi.fn()}
+        onJoinCodeChange={vi.fn()}
+        onJoinSubmit={vi.fn()}
+        onOpenNearestEvent={vi.fn()}
+      />
+    );
+
+    expect(markup).toContain("Активные игры");
+    expect(markup).toContain('data-testid="online-action-hero"');
+    expect(markup).toContain('srcSet="/visuals/online-hero.webp"');
+    expect(markup).toContain('src="/visuals/online-hero.png"');
+    expect(markup).toContain("whitespace-nowrap");
+    expect(markup).toContain("Онлайн-столы");
+    expect(markup).toContain("Играйте за виртуальными столами");
+    expect(markup).toContain("Найти открытые столы");
+    expect(markup).toContain("Создать стол");
+    expect(markup).toContain("Войти по коду");
+    expect(markup).toContain("Ближайшие столы");
+    expect(markup).toContain("Sunday Online");
+    expect(markup).toContain("Вы: Играю");
+    expect(markup).toContain("6 / 9 игроков");
+    expect(markup).toContain("h-8");
+    expect(markup).toContain("py-3");
+    expect(markup.indexOf("Создать стол")).toBeLessThan(markup.indexOf("Войти по коду"));
+    expect(markup.indexOf("Войти по коду")).toBeLessThan(markup.indexOf("Найти открытые столы"));
+    expect(markup).not.toContain("max-w-4xl");
+    expect(markup).not.toContain(">Лобби<");
+    expect(markup).not.toContain("Можно открыть");
+    expect(markup).toContain("Стол 1");
+    expect(markup).toContain("Стол 5");
+    expect(markup).not.toContain("Стол 6");
+    expect(markup).toContain("Показать ещё");
+  });
+
+  it("renders empty lobby sections without repeated large illustrations", () => {
+    const markup = renderToStaticMarkup(
+      <VirtualLobbyScreen
+        activeTables={[]}
+        joinCode=""
+        myTables={[]}
+        recentTables={[]}
         waitingTables={[]}
         onCreateTable={vi.fn()}
         onJoinCodeChange={vi.fn()}
@@ -173,17 +249,11 @@ describe("virtual screens", () => {
       />
     );
 
-    expect(markup).toContain("Мои столы");
-    expect(markup.indexOf("Быстрый вход по коду")).toBeLessThan(markup.indexOf("Мои столы"));
-    expect(markup).toContain("Присоединиться");
-    expect(markup).not.toContain("Быстро посмотреть");
-    expect(markup).not.toContain(">Лобби<");
-    expect(markup).not.toContain("Виртуальные столы");
-    expect(markup).not.toContain(">В игре<");
-    expect(markup).toContain("Стол 1");
-    expect(markup).toContain("Стол 5");
-    expect(markup).not.toContain("Стол 6");
-    expect(markup).toContain("Показать ещё");
+    expect(markup).toContain("Пока нет онлайн-столов");
+    expect(markup).not.toContain("Можно открыть");
+    expect(markup).toContain("Последние игры");
+    expect(markup).not.toContain('/visuals/empty-state.svg');
+    expect(markup).not.toContain("h-36");
   });
 
   it("renders waiting room without invitation link block", () => {
@@ -211,6 +281,7 @@ describe("virtual screens", () => {
   it("keeps create form numeric inputs editable and shows ruble rate", () => {
     const markup = renderToStaticMarkup(
       <CreateVirtualTableScreen
+        clubs={[]}
         values={{
           title: "Новый стол",
           maxSeats: "",
@@ -221,7 +292,10 @@ describe("virtual screens", () => {
           turnDurationSeconds: "",
           reminderDelaySeconds: "",
           timeoutAutoActionRule: "CHECK_OR_FOLD",
-          winProbabilityEnabled: false
+          winProbabilityEnabled: false,
+          clubId: "",
+          scheduledStartAt: "",
+          sendNotifications: true
         }}
         onChange={vi.fn()}
         onSubmit={vi.fn()}
@@ -233,6 +307,13 @@ describe("virtual screens", () => {
     expect(markup).toContain('aria-checked="false"');
     expect(markup).toContain("Показывать шанс выигрыша");
     expect(markup).toContain("Каждый игрок увидит свой шанс по открытым картам.");
+    expect(markup).toContain("Дата и время игры");
+    expect(markup).toContain("Выберите дату и время");
+    expect(markup).toContain("calendar_month");
+    expect(markup).toContain("Большой блайнд");
+    expect(markup).toContain("Малый блайнд");
+    expect(markup).toContain(">50<");
+    expect(markup).not.toContain('value="50"');
     expect(markup).not.toContain("Валюта оценки");
     expect(markup).not.toContain("Стоимость фишки");
     expect(markup).toContain('value=""');

@@ -36,6 +36,7 @@ export type TelegramLaunchData = {
 };
 
 const virtualStartParamPrefixes = ["virtual_table_", "virtual-table_", "virtual_", "poker_"] as const;
+const clubStartParamPrefixes = ["club_", "club-"] as const;
 
 const telegramLaunchWaitIntervalMs = 50;
 const telegramLaunchWaitTimeoutMs = 1500;
@@ -96,6 +97,22 @@ export function getVirtualInviteCodeFromStartParam(
   }
 
   const matchedPrefix = virtualStartParamPrefixes.find(
+    (prefix) => normalized.startsWith(prefix) && normalized.length > prefix.length
+  );
+
+  return matchedPrefix ? normalized.slice(matchedPrefix.length).toUpperCase() : null;
+}
+
+export function getClubInviteCodeFromStartParam(
+  value: string | null | undefined
+): string | null {
+  const normalized = normalizeValue(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const matchedPrefix = clubStartParamPrefixes.find(
     (prefix) => normalized.startsWith(prefix) && normalized.length > prefix.length
   );
 

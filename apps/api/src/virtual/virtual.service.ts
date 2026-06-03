@@ -85,6 +85,7 @@ import {
   type VirtualTurnTimerDto
 } from "@pokertable/shared";
 import { randomBytes } from "node:crypto";
+import { ClubsService } from "../clubs/clubs.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ApiError } from "../shared/api-error";
 import { appendWebAppCacheBuster } from "../shared/web-app-url";
@@ -352,7 +353,8 @@ export class VirtualService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional()
-    private readonly virtualNotificationsService?: VirtualNotificationsService
+    private readonly virtualNotificationsService?: VirtualNotificationsService,
+    @Optional() private readonly clubsService?: ClubsService
   ) {}
 
   async createTable(
@@ -360,6 +362,9 @@ export class VirtualService {
     input: CreateVirtualTableRequestDto
   ): Promise<CreateVirtualTableResponseDto> {
     this.validateCreateTableInput(input);
+    const scheduledStartAt = input.clubId
+      ? parseScheduledStartAt(input.scheduledStartAt, this.invalidInput.bind(this))
+      : null;
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const inviteCode = this.createInviteCode();
@@ -380,6 +385,8 @@ export class VirtualService {
               turnDurationSeconds: input.turnDurationSeconds,
               reminderDelaySeconds: input.reminderDelaySeconds,
               timeoutAutoActionRule: input.timeoutAutoActionRule,
+              clubId: input.clubId ?? null,
+              scheduledStartAt,
               inviteCode,
               status: PrismaVirtualTableStatus.WAITING_FOR_PLAYERS
             }
@@ -397,8 +404,42 @@ export class VirtualService {
             }
           });
 
+          if (input.clubId) {
+            if (!this.clubsService) {
+              throw new ApiError(
+                VIRTUAL_ERROR_CODES.conflict,
+                "Клубы временно недоступны",
+                HttpStatus.INTERNAL_SERVER_ERROR
+              );
+            }
+
+            const clubEventId = await this.clubsService.createEventForVirtualTable(tx, {
+              clubId: input.clubId,
+              createdByUserId: user.id,
+              type: "ONLINE_TABLE",
+              title: input.title,
+              scheduledStartAt: scheduledStartAt as Date,
+              maxPlayers: input.maxPlayers ?? input.maxSeats,
+              location: null,
+              virtualTableId: createdTable.id
+            });
+
+            return tx.virtualTable.update({
+              where: {
+                id: createdTable.id
+              },
+              data: {
+                clubEventId
+              }
+            });
+          }
+
           return createdTable;
         });
+
+        if (input.clubId && input.sendClubInvites && table.clubEventId && this.clubsService) {
+          await this.clubsService.sendEventInvites(table.clubEventId, input.clubId);
+        }
 
         return {
           table: {
@@ -1313,6 +1354,7 @@ export class VirtualService {
             maxSeats: table.maxSeats,
             currentHandId: table.currentHandId,
             startingStackChips: table.startingStackChips.toString(),
+            myStackChips: mySeat.stackChips.toString(),
             chipValueMinor: table.chipValueMinor?.toString() ?? null,
             chipValueCurrency: table.chipValueCurrency,
             smallBlindChips: table.smallBlindChips.toString(),
@@ -2565,6 +2607,14 @@ export class VirtualService {
     if (input.reminderDelaySeconds >= input.turnDurationSeconds) {
       throw this.invalidInput("Напоминание должно прийти раньше тайм-аута");
     }
+
+    if (input.clubId) {
+      parseScheduledStartAt(input.scheduledStartAt, this.invalidInput.bind(this));
+    }
+
+    if (input.maxPlayers !== undefined && input.maxPlayers !== null && input.maxPlayers <= 0) {
+      throw this.invalidInput("Лимит игроков должен быть больше нуля");
+    }
   }
 
   private async getTableOrThrow(tableId: string): Promise<TableRecord> {
@@ -3115,13 +3165,18 @@ export class VirtualService {
     hand: HandRecord | null,
     winProbabilityBySeatId: Map<string, number | null> | null
   ): VirtualSeatDto {
+    const handPlayer = hand?.players.find((player) => player.seatId === seat.id);
+
     return {
       id: seat.id,
       userId: seat.userId,
       displayName: seat.displayName ?? getUserDisplayName(seat.user),
+      avatarUrl: seat.user.avatarUrl,
       seatNumber: seat.seatNumber,
       role: seat.role,
       stackChips: seat.stackChips.toString(),
+      committedStreetChips: handPlayer?.committedStreetChips.toString() ?? "0",
+      committedTotalChips: handPlayer?.committedTotalChips.toString() ?? "0",
       status: seat.status,
       isDealer: hand?.dealerSeatId === seat.id,
       isSmallBlind: hand?.smallBlindSeatId === seat.id,
@@ -4373,6 +4428,23 @@ export class VirtualService {
       target.includes("VirtualAction_tableId_seatId_idempotencyKey_key")
     );
   }
+}
+
+function parseScheduledStartAt(
+  value: string | null | undefined,
+  invalidInput: (message: string) => ApiError
+): Date {
+  if (!value) {
+    throw invalidInput("Укажите дату и время старта");
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw invalidInput("Укажите дату и время старта");
+  }
+
+  return parsed;
 }
 
 function buildVirtualInviteUrl(inviteCode: string): string {
