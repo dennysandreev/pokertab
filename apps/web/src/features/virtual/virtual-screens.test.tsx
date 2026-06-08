@@ -214,8 +214,8 @@ describe("virtual screens", () => {
 
     expect(markup).toContain("Активные игры");
     expect(markup).toContain('data-testid="online-action-hero"');
-    expect(markup).toContain('srcSet="/visuals/online-hero.webp"');
-    expect(markup).toContain('src="/visuals/online-hero.png"');
+    expect(markup).toContain('srcSet="/visuals/online-hero-wide.webp"');
+    expect(markup).toContain('src="/visuals/online-hero-wide.jpg"');
     expect(markup).toContain("whitespace-nowrap");
     expect(markup).toContain("Онлайн-столы");
     expect(markup).toContain("Играйте за виртуальными столами");

@@ -92,12 +92,14 @@ describe("visual system", () => {
   it("resolves all required mini app visual paths", () => {
     expect(resolveMiniAppVisual("home")).toBe("/visuals/home.svg");
     expect(resolveMiniAppVisual("offline")).toBe("/visuals/offline.svg");
-    expect(resolveMiniAppVisual("offline-hero")).toBe("/visuals/offline-hero.png");
-    expect(resolveMiniAppVisual("offline-hero-webp")).toBe("/visuals/offline-hero.webp");
+    expect(resolveMiniAppVisual("offline-hero")).toBe("/visuals/offline-hero-wide.jpg");
+    expect(resolveMiniAppVisual("offline-hero-webp")).toBe("/visuals/offline-hero-wide.webp");
     expect(resolveMiniAppVisual("online")).toBe("/visuals/online.svg");
-    expect(resolveMiniAppVisual("online-hero")).toBe("/visuals/online-hero.png");
-    expect(resolveMiniAppVisual("online-hero-webp")).toBe("/visuals/online-hero.webp");
+    expect(resolveMiniAppVisual("online-hero")).toBe("/visuals/online-hero-wide.jpg");
+    expect(resolveMiniAppVisual("online-hero-webp")).toBe("/visuals/online-hero-wide.webp");
     expect(resolveMiniAppVisual("club")).toBe("/visuals/club.svg");
+    expect(resolveMiniAppVisual("club-hero")).toBe("/visuals/club-hero-wide.jpg");
+    expect(resolveMiniAppVisual("club-hero-webp")).toBe("/visuals/club-hero-wide.webp");
     expect(resolveMiniAppVisual("leaderboard")).toBe("/visuals/leaderboard.svg");
     expect(resolveMiniAppVisual("profile")).toBe("/visuals/profile.svg");
     expect(resolveMiniAppVisual("join-code")).toBe("/visuals/join-code.svg");

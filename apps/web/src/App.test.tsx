@@ -10,6 +10,8 @@ import {
   LeaderboardFiltersSection,
   LeaderboardHeaderSection,
   ProfileHeaderSection,
+  getScrollResetKey,
+  resetDocumentScrollPosition,
   getChromeSubtitle
 } from "./App";
 import { buildHomeViewModel } from "./features/home/home-view";
@@ -262,8 +264,8 @@ describe("App UI sections", () => {
     );
 
     expect(markup).toContain('data-testid="offline-action-hero"');
-    expect(markup).toContain('srcSet="/visuals/offline-hero.webp"');
-    expect(markup).toContain('src="/visuals/offline-hero.png"');
+    expect(markup).toContain('srcSet="/visuals/offline-hero-wide.webp"');
+    expect(markup).toContain('src="/visuals/offline-hero-wide.jpg"');
     expect(markup).toContain("Оффлайн-игры");
     expect(markup).toContain("Реальные игры, ребаи и итоги");
     expect(markup).toContain("Создать игру");
@@ -280,6 +282,27 @@ describe("App UI sections", () => {
     expect(markup).not.toContain("Создайте игру для своей компании");
     expect(markup).toContain("Активные игры");
     expect(markup).toContain("Последние игры");
+  });
+
+  it("builds route scroll reset keys without hash and resets document scroll", () => {
+    expect(getScrollResetKey("/poker", "?tab=open")).toBe("/poker?tab=open");
+    expect(getScrollResetKey("/poker", "?tab=open")).toBe(getScrollResetKey("/poker", "?tab=open"));
+
+    const scrollTarget = {
+      scrollLeft: 12,
+      scrollTo: vi.fn(),
+      scrollTop: 240
+    };
+    scrollTarget.scrollTop = 240;
+    scrollTarget.scrollLeft = 12;
+    resetDocumentScrollPosition({
+      documentElement: scrollTarget as unknown as HTMLElement,
+      scrollingElement: scrollTarget as unknown as Element
+    });
+
+    expect(scrollTarget.scrollTop).toBe(0);
+    expect(scrollTarget.scrollLeft).toBe(0);
+    expect(scrollTarget.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: "auto" });
   });
 
   it("uses rating wording in the leaderboard app chrome", () => {

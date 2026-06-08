@@ -181,14 +181,17 @@ export function ClubsHomeScreen({
         className="relative min-h-[158px] overflow-hidden rounded-[22px] bg-[#060706] shadow-[0_18px_42px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.04)]"
         data-testid="clubs-home-hero"
       >
-        <img
-          alt="Покерный клуб"
-          className="absolute inset-0 h-full w-full object-cover"
-          decoding="async"
-          fetchPriority="high"
-          loading="eager"
-          src={resolveMiniAppVisual("club-hero")}
-        />
+        <picture>
+          <source srcSet={resolveMiniAppVisual("club-hero-webp")} type="image/webp" />
+          <img
+            alt="Покерный клуб"
+            className="absolute inset-0 h-full w-full object-cover"
+            decoding="async"
+            fetchPriority="high"
+            loading="eager"
+            src={resolveMiniAppVisual("club-hero")}
+          />
+        </picture>
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,5,4,0.88)_0%,rgba(3,5,4,0.48)_58%,rgba(3,5,4,0.1)_100%),linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.42))]" />
         <div className="absolute left-5 right-[34%] top-1/2 -translate-y-1/2 text-left">
           <p className="whitespace-nowrap font-display text-[clamp(1.45rem,6vw,2rem)] font-semibold leading-none text-white drop-shadow-[0_8px_22px_rgba(0,0,0,0.62)]">

@@ -302,6 +302,16 @@ function AppShell(): JSX.Element {
     };
   }, [state.status]);
 
+  const scrollResetKey = getScrollResetKey(location.pathname, location.search);
+
+  useEffect(() => {
+    if (isVirtualTableFullscreen) {
+      return;
+    }
+
+    resetDocumentScrollPosition();
+  }, [isVirtualTableFullscreen, scrollResetKey]);
+
   const handleBackNavigation = useCallback((): void => {
     navigateBack(navigate, location.pathname);
   }, [location.pathname, navigate]);
@@ -5206,6 +5216,29 @@ function navigateBack(navigate: NavigateFunction, pathname: string): void {
   }
 
   void navigate(getAppBackFallbackPath(pathname), { replace: true });
+}
+
+export function getScrollResetKey(pathname: string, search: string): string {
+  return `${pathname}${search}`;
+}
+
+export function resetDocumentScrollPosition(
+  documentRef: Pick<Document, "documentElement" | "scrollingElement"> = document
+): void {
+  const scrollTarget = documentRef.scrollingElement ?? documentRef.documentElement;
+  scrollTarget.scrollTop = 0;
+  scrollTarget.scrollLeft = 0;
+
+  if (typeof scrollTarget.scrollTo !== "function") {
+    return;
+  }
+
+  try {
+    scrollTarget.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  } catch {
+    scrollTarget.scrollTop = 0;
+    scrollTarget.scrollLeft = 0;
+  }
 }
 
 function getAppBackFallbackPath(pathname: string): string {

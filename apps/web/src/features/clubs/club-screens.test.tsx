@@ -60,7 +60,8 @@ describe("club screens", () => {
     );
 
     expect(markup).toContain('data-testid="clubs-home-hero"');
-    expect(markup).toContain('src="/visuals/club-hero.jpg"');
+    expect(markup).toContain('srcSet="/visuals/club-hero-wide.webp"');
+    expect(markup).toContain('src="/visuals/club-hero-wide.jpg"');
     expect(markup).toContain("Покерные клубы");
     expect(markup).toContain("Игры, участники и события");
     expect(markup).toContain("У вас пока нет клубов");
