@@ -1,5 +1,6 @@
 import { useState, type JSX, type ReactNode } from "react";
 import type {
+  OpenVirtualTableListItemDto,
   VirtualSeatDto,
   VirtualTableDto,
   VirtualTablesListItemDto
@@ -52,6 +53,7 @@ type LobbyScreenProps = {
   onJoinCodeChange: (value: string) => void;
   onJoinSubmit: () => void;
   onCreateTable: () => void;
+  onOpenTables: () => void;
   onOpenTable?: (tableId: string) => void;
   onOpenNearestEvent?: (clubId: string, eventId: string) => void;
 };
@@ -79,6 +81,15 @@ type JoinVirtualTableScreenProps = {
   onSubmit: () => void;
 };
 
+type OpenVirtualTablesScreenProps = {
+  tables: OpenVirtualTableListItemDto[];
+  isLoading?: boolean;
+  errorMessage?: string | null;
+  joiningTableId?: string | null;
+  onRefresh: () => void;
+  onJoinTable: (tableId: string) => void;
+};
+
 type WaitingRoomScreenProps = {
   table: VirtualTableDto;
   seats: VirtualSeatDto[];
@@ -102,6 +113,7 @@ export function VirtualLobbyScreen({
   onJoinCodeChange,
   onJoinSubmit,
   onCreateTable,
+  onOpenTables,
   onOpenTable,
   onOpenNearestEvent
 }: LobbyScreenProps): JSX.Element {
@@ -117,6 +129,7 @@ export function VirtualLobbyScreen({
         <OnlineActionHero
           joinCode={joinCode}
           onCreateTable={onCreateTable}
+          onOpenTables={onOpenTables}
           onJoinCodeChange={onJoinCodeChange}
           onJoinSubmit={onJoinSubmit}
         />
@@ -166,12 +179,14 @@ function OnlineActionHero({
   joinCode,
   onJoinCodeChange,
   onJoinSubmit,
-  onCreateTable
+  onCreateTable,
+  onOpenTables
 }: {
   joinCode: string;
   onJoinCodeChange: (value: string) => void;
   onJoinSubmit: () => void;
   onCreateTable: () => void;
+  onOpenTables: () => void;
 }): JSX.Element {
   const [isJoinOpen, setIsJoinOpen] = useState(false);
 
@@ -255,9 +270,9 @@ function OnlineActionHero({
       ) : null}
 
       <button
-        aria-disabled="true"
         className="min-h-[72px] w-full rounded-2xl bg-[#151716] px-3 py-3 text-left text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.055),0_12px_28px_rgba(0,0,0,0.24)]"
         type="button"
+        onClick={onOpenTables}
       >
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#4edea3] shadow-[inset_0_0_0_2px_rgba(78,222,163,0.45)]">
@@ -265,12 +280,120 @@ function OnlineActionHero({
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold leading-tight">Найти открытые столы</p>
-            <p className="mt-1 truncate text-xs font-medium text-[#a8b0ab]">Скоро появятся открытые игры</p>
+            <p className="mt-1 truncate text-xs font-medium text-[#a8b0ab]">Столы, куда можно сесть сейчас</p>
           </div>
           <span className="material-symbols-outlined text-[22px] text-white/55">search</span>
         </div>
       </button>
     </div>
+  );
+}
+
+export function OpenVirtualTablesScreen({
+  tables,
+  isLoading = false,
+  errorMessage = null,
+  joiningTableId = null,
+  onRefresh,
+  onJoinTable
+}: OpenVirtualTablesScreenProps): JSX.Element {
+  return (
+    <div className={virtualScreenClassName}>
+      <div className="mx-auto max-w-4xl space-y-4 pb-[calc(env(safe-area-inset-bottom)+7rem)]">
+        <section className="relative overflow-hidden rounded-[22px] bg-[#151716] p-4 shadow-[0_18px_42px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.035)]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(78,222,163,0.18),transparent_36%),linear-gradient(135deg,rgba(14,42,29,0.65),rgba(10,12,11,0.92))]" />
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4edea3]">Открытые столы</p>
+              <h1 className="mt-2 text-2xl font-semibold leading-tight text-white">Найдите игру</h1>
+              <p className="mt-2 max-w-[22rem] text-sm leading-6 text-[#a8b0ab]">
+                Только публичные столы, где еще есть свободные места.
+              </p>
+            </div>
+            <Button
+              className="shrink-0 border border-white/[0.06] bg-[#171818] text-white shadow-none hover:bg-[#202121]"
+              disabled={isLoading}
+              onClick={onRefresh}
+            >
+              <span className="material-symbols-outlined text-[18px]">refresh</span>
+            </Button>
+          </div>
+        </section>
+
+        {errorMessage ? (
+          <div className="rounded-2xl bg-[#3a1515]/70 px-4 py-3 text-sm text-[#ffb4ab]">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        {isLoading && tables.length === 0 ? (
+          <VisualEmptyState
+            compact
+            description="Смотрим, какие столы сейчас ждут игроков."
+            title="Загружаем столы"
+          />
+        ) : tables.length === 0 ? (
+          <VisualEmptyState
+            compact
+            description="Публичные столы появятся здесь, когда кто-то создаст игру без приватного режима."
+            title="Открытых столов пока нет"
+          />
+        ) : (
+          <div className="space-y-3">
+            {tables.map((table) => (
+              <OpenVirtualTableRow
+                key={table.id}
+                isJoining={joiningTableId === table.id}
+                table={table}
+                onJoin={() => onJoinTable(table.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OpenVirtualTableRow({
+  table,
+  isJoining,
+  onJoin
+}: {
+  table: OpenVirtualTableListItemDto;
+  isJoining: boolean;
+  onJoin: () => void;
+}): JSX.Element {
+  return (
+    <button
+      className="w-full rounded-[22px] bg-[#151716] px-4 py-4 text-left text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.045),0_14px_34px_rgba(0,0,0,0.26)] transition hover:bg-[#19201c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4edea3]"
+      disabled={isJoining}
+      type="button"
+      onClick={onJoin}
+    >
+      <div className="flex items-center gap-3">
+        <img
+          alt=""
+          className="h-14 w-14 shrink-0 rounded-2xl object-cover"
+          src={resolveMiniAppVisual("online")}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-lg font-semibold leading-tight">{table.title}</p>
+            {table.winProbabilityEnabled ? <RolePill tone="positive">шанс</RolePill> : null}
+          </div>
+          <p className="mt-1 truncate text-sm text-[#a8b0ab]">
+            {formatSeatCount(table.seatsCount, table.maxSeats)} · {formatBlindPair(table.smallBlindChips, table.bigBlindChips)}
+          </p>
+          <p className="mt-1 truncate text-xs text-[#777f7a]">
+            {formatVirtualChips(table.startingStackChips)} · {formatDurationMinutes(table.turnDurationSeconds)} · {table.ownerDisplayName}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full bg-[#4edea3] px-4 py-2 text-sm font-semibold text-[#04130d]">
+          {isJoining ? "Садимся" : "Сесть"}
+        </span>
+      </div>
+    </button>
   );
 }
 
@@ -407,6 +530,37 @@ export function CreateVirtualTableScreen({
                     className={cn(
                       "absolute top-1 h-5 w-5 rounded-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.3)] transition-transform",
                       values.winProbabilityEnabled ? "translate-x-7" : "translate-x-1"
+                    )}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white/[0.025] px-4 py-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <FieldLabel>Приватный матч</FieldLabel>
+                  <p className="mt-3 text-sm leading-6 text-[#8e9192]">
+                    Скрыт из открытых столов, вход только по коду.
+                  </p>
+                </div>
+                <button
+                  aria-checked={values.isPrivate}
+                  aria-label="Приватный матч"
+                  className={cn(
+                    "relative inline-flex h-8 w-14 shrink-0 rounded-full border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4edea3]",
+                    values.isPrivate
+                      ? "border-[#4edea3]/40 bg-[#173227]"
+                      : "border-white/[0.06] bg-[#1b1c1c]"
+                  )}
+                  role="switch"
+                  type="button"
+                  onClick={() => onChange("isPrivate", !values.isPrivate)}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-1 h-5 w-5 rounded-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.3)] transition-transform",
+                      values.isPrivate ? "translate-x-7" : "translate-x-1"
                     )}
                   />
                 </button>

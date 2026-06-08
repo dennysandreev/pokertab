@@ -99,6 +99,7 @@ export type CreateVirtualTableRequestDto = {
   reminderDelaySeconds: number;
   timeoutAutoActionRule: VirtualTimeoutAutoActionRule;
   winProbabilityEnabled: boolean;
+  isPrivate?: boolean;
   clubId?: string | null;
   scheduledStartAt?: string | null;
   sendClubInvites?: boolean;
@@ -118,6 +119,7 @@ export type CreateVirtualTableResponseDto = {
     chipValueMinor: string | null;
     chipValueCurrency: string | null;
     winProbabilityEnabled: boolean;
+    isPrivate: boolean;
   };
 };
 
@@ -148,6 +150,7 @@ export type VirtualTableDto = {
   reminderDelaySeconds: number;
   timeoutAutoActionRule: VirtualTimeoutAutoActionRule;
   winProbabilityEnabled: boolean;
+  isPrivate: boolean;
   potTotalChips: string;
   currentHandId: string | null;
   createdAt: string;
@@ -288,6 +291,7 @@ export type VirtualTablesListItemDto = {
   reminderDelaySeconds: number;
   timeoutAutoActionRule: VirtualTimeoutAutoActionRule;
   winProbabilityEnabled: boolean;
+  isPrivate: boolean;
   potTotalChips: string;
   createdAt: string;
   startedAt: string | null;
@@ -304,6 +308,24 @@ export type VirtualTablesListItemDto = {
 
 export type GetVirtualTablesResponseDto = {
   items: VirtualTablesListItemDto[];
+};
+
+export type OpenVirtualTableListItemDto = {
+  id: string;
+  title: string;
+  maxSeats: number;
+  seatsCount: number;
+  smallBlindChips: string;
+  bigBlindChips: string;
+  startingStackChips: string;
+  turnDurationSeconds: number;
+  winProbabilityEnabled: boolean;
+  createdAt: string;
+  ownerDisplayName: string;
+};
+
+export type GetOpenVirtualTablesResponseDto = {
+  items: OpenVirtualTableListItemDto[];
 };
 
 export type VirtualHandHistoryTableSummaryDto = {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import type {
   GetMyVirtualStatsResponseDto,
+  GetOpenVirtualTablesResponseDto,
   GetVirtualHandHistoriesResponseDto,
   GetVirtualHandHistoryResponseDto,
   GetVirtualLeaderboardResponseDto,
@@ -22,11 +23,13 @@ import {
   createVirtualTable,
   finishVirtualTable,
   getMyVirtualStats,
+  getOpenVirtualTables,
   getVirtualHandHistories,
   getVirtualHandHistory,
   getVirtualLeaderboard,
   getVirtualTable,
   joinVirtualTable,
+  joinOpenVirtualTable,
   pauseVirtualTable,
   raiseVirtualBlinds,
   requestVirtualSitOut,
@@ -52,6 +55,7 @@ import {
 } from "./virtual-table-form";
 import {
   getCreateVirtualTableRoute,
+  getOpenVirtualTablesRoute,
   getVirtualHandRoute,
   getVirtualTableHistoryRoute,
   getVirtualTableRoute
@@ -66,6 +70,7 @@ import {
 import {
   CreateVirtualTableScreen,
   JoinVirtualTableScreen,
+  OpenVirtualTablesScreen,
   VirtualLobbyScreen,
   VirtualWaitingRoomScreen
 } from "./virtual-screens";
@@ -100,6 +105,7 @@ const DEFAULT_CREATE_VALUES: CreateVirtualTableFormValues = {
   reminderDelaySeconds: "15",
   timeoutAutoActionRule: "CHECK_OR_FOLD",
   winProbabilityEnabled: false,
+  isPrivate: false,
   clubId: "",
   scheduledStartAt: "",
   sendNotifications: true
@@ -250,6 +256,9 @@ export function VirtualLobbyContainer(): JSX.Element {
         onCreateTable={() => {
           void navigate(getCreateVirtualTableRoute());
         }}
+        onOpenTables={() => {
+          void navigate(getOpenVirtualTablesRoute());
+        }}
         onJoinCodeChange={(value) => {
           setJoinCode(value);
           if (errorMessage) {
@@ -267,6 +276,107 @@ export function VirtualLobbyContainer(): JSX.Element {
         waitingTables={waitingTables}
       />
     </div>
+  );
+}
+
+export function OpenVirtualTablesContainer(): JSX.Element {
+  const navigate = useNavigate();
+  const { state } = useSession();
+  const { refreshVirtualTables } = useVirtualTablesList();
+  const [openTablesState, setOpenTablesState] = useState<AsyncState<GetOpenVirtualTablesResponseDto>>({
+    status: "idle",
+    data: null,
+    errorMessage: null
+  });
+  const [joiningTableId, setJoiningTableId] = useState<string | null>(null);
+
+  const refreshOpenTables = useCallback(async (): Promise<void> => {
+    if (!state.accessToken) {
+      return;
+    }
+
+    setOpenTablesState((current) => ({
+      status: current.data ? "idle" : "loading",
+      data: current.data,
+      errorMessage: null
+    }));
+
+    try {
+      const data = await getOpenVirtualTables(state.accessToken);
+      setOpenTablesState({
+        status: "ready",
+        data,
+        errorMessage: null
+      });
+    } catch (error) {
+      setOpenTablesState((current) => ({
+        status: "error",
+        data: current.data,
+        errorMessage: getErrorMessage(error, "Не получилось загрузить открытые столы")
+      }));
+    }
+  }, [state.accessToken]);
+
+  useEffect(() => {
+    void refreshOpenTables();
+  }, [refreshOpenTables]);
+
+  useEffect(() => {
+    if (!state.accessToken) {
+      return;
+    }
+
+    const timerId = window.setInterval(() => {
+      void refreshOpenTables();
+    }, 5000);
+
+    return () => window.clearInterval(timerId);
+  }, [refreshOpenTables, state.accessToken]);
+
+  const handleJoinOpenTable = useCallback(
+    async (tableId: string): Promise<void> => {
+      if (!state.accessToken || joiningTableId) {
+        return;
+      }
+
+      setJoiningTableId(tableId);
+
+      try {
+        const data = await joinOpenVirtualTable(state.accessToken, tableId);
+        await refreshVirtualTables();
+        void navigate(getVirtualTableRoute(data.tableId));
+      } catch (error) {
+        setOpenTablesState((current) => ({
+          status: "error",
+          data: current.data,
+          errorMessage: getErrorMessage(error, "Не получилось сесть за стол")
+        }));
+        void refreshOpenTables();
+      } finally {
+        setJoiningTableId(null);
+      }
+    },
+    [joiningTableId, navigate, refreshOpenTables, refreshVirtualTables, state.accessToken]
+  );
+
+  if (!state.accessToken) {
+    return (
+      <VirtualRouteState
+        description="После входа здесь появятся открытые столы, куда можно сесть без кода."
+        title="Открытые столы"
+      />
+    );
+  }
+
+  return (
+    <OpenVirtualTablesScreen
+      errorMessage={openTablesState.status === "error" ? openTablesState.errorMessage : null}
+      isLoading={openTablesState.status === "loading"}
+      joiningTableId={joiningTableId}
+      tables={openTablesState.data?.items ?? []}
+      onJoinTable={(tableId) => void handleJoinOpenTable(tableId)}
+      onRefresh={() => void refreshOpenTables()}
+    />
   );
 }
 
@@ -1649,7 +1759,7 @@ function toCreateFormValue(
     return typeof value === "string" ? value : "";
   }
 
-  if (field === "winProbabilityEnabled") {
+  if (field === "winProbabilityEnabled" || field === "isPrivate") {
     return value === true;
   }
 

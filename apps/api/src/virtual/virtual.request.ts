@@ -51,6 +51,7 @@ export function normalizeCreateVirtualTableRequest(
     "Не удалось определить действие по тайм-ауту"
   ).trim() as VirtualTimeoutAutoActionRule;
   const winProbabilityEnabled = getOptionalBoolean(payload.winProbabilityEnabled) ?? false;
+  const isPrivate = getOptionalBoolean(payload.isPrivate) ?? false;
   const clubId = normalizeNullableString(payload.clubId);
   const scheduledStartAt = normalizeNullableString(payload.scheduledStartAt);
   const sendClubInvites = getOptionalBoolean(payload.sendClubInvites) ?? false;
@@ -76,6 +77,7 @@ export function normalizeCreateVirtualTableRequest(
     reminderDelaySeconds,
     timeoutAutoActionRule,
     winProbabilityEnabled,
+    isPrivate,
     ...(clubId !== undefined ? { clubId } : {}),
     ...(scheduledStartAt !== undefined ? { scheduledStartAt } : {}),
     ...(sendClubInvites ? { sendClubInvites } : {}),

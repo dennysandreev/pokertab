@@ -9,6 +9,7 @@ import type {
 import {
   CreateVirtualTableScreen,
   JoinVirtualTableScreen,
+  OpenVirtualTablesScreen,
   RECENT_TABLES_PAGE_SIZE,
   VirtualLobbyScreen,
   VirtualWaitingRoomScreen
@@ -35,6 +36,7 @@ function buildListItem(index: number): VirtualTablesListItemDto {
     reminderDelaySeconds: 10,
     timeoutAutoActionRule: "CHECK_OR_FOLD",
     winProbabilityEnabled: false,
+    isPrivate: false,
     potTotalChips: "0",
     createdAt: "2026-05-14T10:00:00.000Z",
     startedAt: "2026-05-14T10:05:00.000Z",
@@ -67,6 +69,7 @@ const waitingTable: VirtualTableDto = {
   reminderDelaySeconds: 10,
   timeoutAutoActionRule: "CHECK_OR_FOLD",
   winProbabilityEnabled: false,
+  isPrivate: false,
   potTotalChips: "0",
   currentHandId: null,
   createdAt: "2026-05-14T10:00:00.000Z",
@@ -202,6 +205,7 @@ describe("virtual screens", () => {
         recentTables={recentTables}
         waitingTables={[]}
         onCreateTable={vi.fn()}
+        onOpenTables={vi.fn()}
         onJoinCodeChange={vi.fn()}
         onJoinSubmit={vi.fn()}
         onOpenNearestEvent={vi.fn()}
@@ -216,6 +220,7 @@ describe("virtual screens", () => {
     expect(markup).toContain("Онлайн-столы");
     expect(markup).toContain("Играйте за виртуальными столами");
     expect(markup).toContain("Найти открытые столы");
+    expect(markup).toContain("Столы, куда можно сесть сейчас");
     expect(markup).toContain("Создать стол");
     expect(markup).toContain("Войти по коду");
     expect(markup).toContain("Ближайшие столы");
@@ -244,6 +249,7 @@ describe("virtual screens", () => {
         recentTables={[]}
         waitingTables={[]}
         onCreateTable={vi.fn()}
+        onOpenTables={vi.fn()}
         onJoinCodeChange={vi.fn()}
         onJoinSubmit={vi.fn()}
       />
@@ -254,6 +260,38 @@ describe("virtual screens", () => {
     expect(markup).toContain("Последние игры");
     expect(markup).not.toContain('/visuals/empty-state.svg');
     expect(markup).not.toContain("h-36");
+  });
+
+  it("renders open tables without invite codes", () => {
+    const markup = renderToStaticMarkup(
+      <OpenVirtualTablesScreen
+        tables={[
+          {
+            id: "table-open",
+            title: "Открытая игра",
+            maxSeats: 6,
+            seatsCount: 3,
+            smallBlindChips: "50",
+            bigBlindChips: "100",
+            startingStackChips: "10000",
+            turnDurationSeconds: 30,
+            winProbabilityEnabled: true,
+            createdAt: "2026-06-08T12:00:00.000Z",
+            ownerDisplayName: "Denis"
+          }
+        ]}
+        onJoinTable={vi.fn()}
+        onRefresh={vi.fn()}
+      />
+    );
+
+    expect(markup).toContain("Открытые столы");
+    expect(markup).toContain("Открытая игра");
+    expect(markup).toContain("3 / 6");
+    expect(markup).toContain("50 / 100");
+    expect(markup).toContain("Сесть");
+    expect(markup).not.toContain("inviteCode");
+    expect(markup).not.toContain("AB12CD34");
   });
 
   it("renders waiting room without invitation link block", () => {
@@ -293,6 +331,7 @@ describe("virtual screens", () => {
           reminderDelaySeconds: "",
           timeoutAutoActionRule: "CHECK_OR_FOLD",
           winProbabilityEnabled: false,
+          isPrivate: false,
           clubId: "",
           scheduledStartAt: "",
           sendNotifications: true
@@ -307,6 +346,8 @@ describe("virtual screens", () => {
     expect(markup).toContain('aria-checked="false"');
     expect(markup).toContain("Показывать шанс выигрыша");
     expect(markup).toContain("Каждый игрок увидит свой шанс по открытым картам.");
+    expect(markup).toContain("Приватный матч");
+    expect(markup).toContain("Скрыт из открытых столов, вход только по коду.");
     expect(markup).toContain("Дата и время игры");
     expect(markup).toContain("Выберите дату и время");
     expect(markup).toContain("calendar_month");

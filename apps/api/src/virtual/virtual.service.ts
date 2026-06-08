@@ -50,6 +50,7 @@ import {
   type GetVirtualHandHistoryResponseDto,
   type GetVirtualLeaderboardQueryDto,
   type GetVirtualLeaderboardResponseDto,
+  type GetOpenVirtualTablesResponseDto,
   type GetVirtualPlayerProfileResponseDto,
   type CreateVirtualTableResponseDto,
   type FinishVirtualTableResponseDto,
@@ -119,6 +120,10 @@ type TableRecord = VirtualTable & {
       user: User;
     }
   >;
+};
+
+type JoinableTableRecord = VirtualTable & {
+  seats: VirtualSeat[];
 };
 
 type TableReactionRecord = VirtualTableReaction & {
@@ -385,6 +390,7 @@ export class VirtualService {
               turnDurationSeconds: input.turnDurationSeconds,
               reminderDelaySeconds: input.reminderDelaySeconds,
               timeoutAutoActionRule: input.timeoutAutoActionRule,
+              isPrivate: input.isPrivate ?? false,
               clubId: input.clubId ?? null,
               scheduledStartAt,
               inviteCode,
@@ -453,7 +459,8 @@ export class VirtualService {
             bigBlindChips: table.bigBlindChips.toString(),
             chipValueMinor: table.chipValueMinor?.toString() ?? null,
             chipValueCurrency: table.chipValueCurrency,
-            winProbabilityEnabled: table.winProbabilityEnabled
+            winProbabilityEnabled: table.winProbabilityEnabled,
+            isPrivate: table.isPrivate
           }
         };
       } catch (error) {
@@ -501,6 +508,46 @@ export class VirtualService {
       );
     }
 
+    return this.joinWaitingTable(user, table);
+  }
+
+  async joinOpenTable(user: UserDto, tableId: string): Promise<JoinVirtualTableResponseDto> {
+    const table = await this.prisma.virtualTable.findUnique({
+      where: {
+        id: tableId
+      },
+      include: {
+        seats: {
+          orderBy: {
+            seatNumber: "asc"
+          }
+        }
+      }
+    });
+
+    if (!table) {
+      throw new ApiError(
+        VIRTUAL_ERROR_CODES.notFound,
+        "Стол не найден",
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    if (table.isPrivate) {
+      throw new ApiError(
+        VIRTUAL_ERROR_CODES.forbidden,
+        "Этот стол доступен только по коду",
+        HttpStatus.FORBIDDEN
+      );
+    }
+
+    return this.joinWaitingTable(user, table);
+  }
+
+  private async joinWaitingTable(
+    user: UserDto,
+    table: JoinableTableRecord
+  ): Promise<JoinVirtualTableResponseDto> {
     if (table.status !== PrismaVirtualTableStatus.WAITING_FOR_PLAYERS) {
       throw new ApiError(
         VIRTUAL_ERROR_CODES.conflict,
@@ -1364,6 +1411,7 @@ export class VirtualService {
             reminderDelaySeconds: table.reminderDelaySeconds,
             timeoutAutoActionRule: table.timeoutAutoActionRule,
             potTotalChips: currentHand?.potTotalChips.toString() ?? "0",
+            isPrivate: table.isPrivate,
             createdAt: table.createdAt.toISOString(),
             startedAt: table.startedAt?.toISOString() ?? null,
             pausedAt: table.pausedAt?.toISOString() ?? null,
@@ -1378,6 +1426,57 @@ export class VirtualService {
             lastHandNumber: lastHand?.handNumber ?? null
           };
         })
+    };
+  }
+
+  async listOpenTables(_user: UserDto): Promise<GetOpenVirtualTablesResponseDto> {
+    void _user;
+
+    const tables = await this.prisma.virtualTable.findMany({
+      where: {
+        isPrivate: false,
+        status: PrismaVirtualTableStatus.WAITING_FOR_PLAYERS
+      },
+      include: {
+        owner: true,
+        seats: {
+          where: {
+            status: {
+              not: PrismaVirtualSeatStatus.LEFT
+            }
+          },
+          orderBy: {
+            seatNumber: "asc"
+          }
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      take: 50
+    });
+
+    return {
+      items: tables
+        .filter(
+          (table) =>
+            !table.isPrivate &&
+            table.status === PrismaVirtualTableStatus.WAITING_FOR_PLAYERS &&
+            table.seats.length < table.maxSeats
+        )
+        .map((table) => ({
+          id: table.id,
+          title: table.title,
+          maxSeats: table.maxSeats,
+          seatsCount: table.seats.length,
+          smallBlindChips: table.smallBlindChips.toString(),
+          bigBlindChips: table.bigBlindChips.toString(),
+          startingStackChips: table.startingStackChips.toString(),
+          turnDurationSeconds: table.turnDurationSeconds,
+          winProbabilityEnabled: table.winProbabilityEnabled,
+          createdAt: table.createdAt.toISOString(),
+          ownerDisplayName: getUserDisplayName(table.owner)
+        }))
     };
   }
 
@@ -3151,6 +3250,7 @@ export class VirtualService {
       turnDurationSeconds: table.turnDurationSeconds,
       reminderDelaySeconds: table.reminderDelaySeconds,
       timeoutAutoActionRule: table.timeoutAutoActionRule,
+      isPrivate: table.isPrivate,
       potTotalChips: hand?.potTotalChips.toString() ?? "0",
       currentHandId: table.currentHandId,
       createdAt: table.createdAt.toISOString(),

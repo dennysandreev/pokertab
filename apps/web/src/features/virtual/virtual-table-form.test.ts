@@ -24,6 +24,7 @@ const validValues = {
   reminderDelaySeconds: "15",
   timeoutAutoActionRule: "CHECK_OR_FOLD" as const,
   winProbabilityEnabled: false,
+  isPrivate: false,
   clubId: "",
   scheduledStartAt: "",
   sendNotifications: true
@@ -42,7 +43,19 @@ describe("virtual table form helpers", () => {
       turnDurationSeconds: 30,
       reminderDelaySeconds: 15,
       timeoutAutoActionRule: "CHECK_OR_FOLD",
-      winProbabilityEnabled: false
+      winProbabilityEnabled: false,
+      isPrivate: false
+    });
+  });
+
+  it("includes private match toggle in create payload", () => {
+    expect(
+      buildCreateVirtualTablePayload({
+        ...validValues,
+        isPrivate: true
+      })
+    ).toMatchObject({
+      isPrivate: true
     });
   });
 

@@ -10,6 +10,10 @@ export function getJoinVirtualTableRoute(): string {
   return "/poker/join";
 }
 
+export function getOpenVirtualTablesRoute(): string {
+  return "/poker/open";
+}
+
 export function getJoinVirtualTableInviteRoute(inviteCode: string): string {
   return `/poker/join/${inviteCode}`;
 }

@@ -5,6 +5,7 @@ import type {
   FinishVirtualTableResponseDto,
   GetVirtualHandHistoriesResponseDto,
   GetMyVirtualStatsResponseDto,
+  GetOpenVirtualTablesResponseDto,
   GetVirtualHandHistoryResponseDto,
   GetVirtualLeaderboardResponseDto,
   GetVirtualPlayerProfileResponseDto,
@@ -56,6 +57,14 @@ export class VirtualController {
     @Body() body: unknown
   ): Promise<JoinVirtualTableResponseDto> {
     return this.virtualService.joinTable(user, normalizeJoinVirtualTableRequest(body));
+  }
+
+  @Post("tables/:tableId/join-open")
+  joinOpenTable(
+    @CurrentUser() user: UserDto,
+    @Param("tableId") tableId: string
+  ): Promise<JoinVirtualTableResponseDto> {
+    return this.virtualService.joinOpenTable(user, tableId);
   }
 
   @Post("tables/:tableId/start")
@@ -143,6 +152,11 @@ export class VirtualController {
   @Get("tables")
   listTables(@CurrentUser() user: UserDto): Promise<GetVirtualTablesResponseDto> {
     return this.virtualService.listTables(user);
+  }
+
+  @Get("tables/open")
+  listOpenTables(@CurrentUser() user: UserDto): Promise<GetOpenVirtualTablesResponseDto> {
+    return this.virtualService.listOpenTables(user);
   }
 
   @Get("tables/:tableId/hands")

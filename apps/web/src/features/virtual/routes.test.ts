@@ -3,6 +3,7 @@ import {
   getCreateVirtualTableRoute,
   getJoinVirtualTableInviteRoute,
   getJoinVirtualTableRoute,
+  getOpenVirtualTablesRoute,
   getVirtualHandRoute,
   getVirtualLeaderboardRoute,
   getVirtualLobbyRoute,
@@ -15,6 +16,7 @@ describe("virtual routes", () => {
   it("builds poker routes", () => {
     expect(getVirtualLobbyRoute()).toBe("/poker");
     expect(getCreateVirtualTableRoute()).toBe("/poker/new");
+    expect(getOpenVirtualTablesRoute()).toBe("/poker/open");
     expect(getJoinVirtualTableRoute()).toBe("/poker/join");
     expect(getJoinVirtualTableInviteRoute("AB12CD34")).toBe("/poker/join/AB12CD34");
     expect(getVirtualTableRoute("table-1")).toBe("/poker/tables/table-1");

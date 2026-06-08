@@ -26,6 +26,7 @@ describe("virtual data helpers", () => {
             reminderDelaySeconds: 15,
             timeoutAutoActionRule: "CHECK_OR_FOLD" as const,
             winProbabilityEnabled: false,
+            isPrivate: false,
             potTotalChips: "40",
             createdAt: "2026-05-14T10:00:00.000Z",
             startedAt: "2026-05-14T10:05:00.000Z",

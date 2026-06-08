@@ -52,6 +52,7 @@ import type {
   StartVirtualTableResponseDto,
   CreateVirtualTableRequestDto,
   CreateVirtualTableResponseDto,
+  GetOpenVirtualTablesResponseDto,
   ResumeVirtualTableResponseDto,
   FinishVirtualTableResponseDto,
   CancelVirtualTableResponseDto
@@ -275,6 +276,14 @@ export async function getVirtualTables(
   });
 }
 
+export async function getOpenVirtualTables(
+  accessToken: string
+): Promise<GetOpenVirtualTablesResponseDto> {
+  return apiRequest<GetOpenVirtualTablesResponseDto>("/api/virtual/tables/open", {
+    headers: getAuthorizedHeaders(accessToken)
+  });
+}
+
 export async function createVirtualTable(
   accessToken: string,
   payload: CreateVirtualTableRequestDto
@@ -294,6 +303,16 @@ export async function joinVirtualTable(
     method: "POST",
     headers: getAuthorizedHeaders(accessToken),
     body: JSON.stringify(payload)
+  });
+}
+
+export async function joinOpenVirtualTable(
+  accessToken: string,
+  tableId: string
+): Promise<JoinVirtualTableResponseDto> {
+  return apiRequest<JoinVirtualTableResponseDto>(`/api/virtual/tables/${tableId}/join-open`, {
+    method: "POST",
+    headers: getAuthorizedHeaders(accessToken)
   });
 }
 

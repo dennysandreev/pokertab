@@ -314,6 +314,32 @@ describe("VirtualController", () => {
     expect(virtualService.listTables).toHaveBeenCalledWith(baseUser);
   });
 
+  it("calls service for listing open tables", async () => {
+    const virtualService = createVirtualServiceMock();
+    virtualService.listOpenTables.mockResolvedValue({
+      items: []
+    });
+    const controller = new VirtualController(virtualService as never);
+
+    await controller.listOpenTables(baseUser);
+
+    expect(virtualService.listOpenTables).toHaveBeenCalledWith(baseUser);
+  });
+
+  it("calls service for joining an open table", async () => {
+    const virtualService = createVirtualServiceMock();
+    virtualService.joinOpenTable.mockResolvedValue({
+      tableId: "table-1",
+      seatId: "seat-1",
+      status: "WAITING_FOR_PLAYERS"
+    });
+    const controller = new VirtualController(virtualService as never);
+
+    await controller.joinOpenTable(baseUser, "table-1");
+
+    expect(virtualService.joinOpenTable).toHaveBeenCalledWith(baseUser, "table-1");
+  });
+
   it("calls service for hand history", async () => {
     const virtualService = createVirtualServiceMock();
     virtualService.getHandHistory.mockResolvedValue({
@@ -471,6 +497,7 @@ function createVirtualServiceMock() {
   return {
     createTable: jest.fn(),
     joinTable: jest.fn(),
+    joinOpenTable: jest.fn(),
     startTable: jest.fn(),
     startNextHand: jest.fn(),
     pauseTable: jest.fn(),
@@ -481,6 +508,7 @@ function createVirtualServiceMock() {
     requestSitOut: jest.fn(),
     returnToTable: jest.fn(),
     listTables: jest.fn(),
+    listOpenTables: jest.fn(),
     listHandHistories: jest.fn(),
     getHandHistory: jest.fn(),
     getTable: jest.fn(),

@@ -199,6 +199,7 @@ describe("virtual table toast helpers", () => {
         reminderDelaySeconds: 10,
         timeoutAutoActionRule: "CHECK_OR_FOLD",
         winProbabilityEnabled: false,
+        isPrivate: false,
         potTotalChips: "900",
         currentHandId: "hand-1",
         createdAt: "2026-05-14T10:00:00.000Z",

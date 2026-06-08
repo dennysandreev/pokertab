@@ -170,6 +170,7 @@ describe("VirtualService", () => {
             smallBlindChips: bigint;
             bigBlindChips: bigint;
             winProbabilityEnabled: boolean;
+            isPrivate: boolean;
             timeoutAutoActionRule: TimeoutAutoActionRule;
           };
         }
@@ -188,6 +189,7 @@ describe("VirtualService", () => {
     >(prisma.virtualSeat.create);
 
     expect(createTableCall?.data.ownerUserId).toBe(baseUser.id);
+    expect(createTableCall?.data.isPrivate).toBe(false);
     expect(createTableCall?.data.title).toBe(createTableInput.title);
     expect(createTableCall?.data.maxSeats).toBe(6);
     expect(createTableCall?.data.startingStackChips).toBe(1000n);
@@ -214,8 +216,33 @@ describe("VirtualService", () => {
       bigBlindChips: "10",
       chipValueMinor: "10",
       chipValueCurrency: "RUB",
-      winProbabilityEnabled: true
+      winProbabilityEnabled: true,
+      isPrivate: false
     });
+  });
+
+  it("creates a private table when requested", async () => {
+    const prisma = createPrismaMock();
+    const table = createTableRecord({
+      isPrivate: true
+    });
+
+    prisma.virtualTable.create.mockResolvedValue(table);
+    prisma.virtualSeat.create.mockResolvedValue(createSeatRecord());
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: Pick<MockPrisma, "virtualTable" | "virtualSeat">) => Promise<VirtualTable>) =>
+        callback({ virtualTable: prisma.virtualTable, virtualSeat: prisma.virtualSeat })
+    );
+
+    const service = new VirtualService(prisma as unknown as PrismaService);
+    const result = await service.createTable(baseUser, {
+      ...createTableInput,
+      isPrivate: true
+    });
+    const createTableCall = getFirstCall<{ data: { isPrivate: boolean } }>(prisma.virtualTable.create);
+
+    expect(createTableCall?.data.isPrivate).toBe(true);
+    expect(result.table.isPrivate).toBe(true);
   });
 
   it("creates a club event for a scheduled club table and sends invites", async () => {
@@ -4069,6 +4096,108 @@ describe("VirtualService", () => {
     expect(result.items[0]).not.toHaveProperty("myPrivateCards");
   });
 
+  it("lists only public waiting tables with free seats as open tables", async () => {
+    const prisma = createPrismaMock();
+    const publicTable = createTableRecord({
+      id: "table-public",
+      title: "Открытый стол",
+      isPrivate: false,
+      maxSeats: 6,
+      seats: [createSeatRecord({ id: "seat-1" })],
+      owner: createUserRecord({
+        firstName: "Илья"
+      })
+    });
+    const privateTable = createTableRecord({
+      id: "table-private",
+      isPrivate: true,
+      seats: [createSeatRecord({ id: "seat-private" })]
+    });
+    const fullTable = createTableRecord({
+      id: "table-full",
+      maxSeats: 1,
+      seats: [createSeatRecord({ id: "seat-full" })]
+    });
+
+    prisma.virtualTable.findMany.mockResolvedValue([publicTable, privateTable, fullTable]);
+
+    const service = new VirtualService(prisma as unknown as PrismaService);
+    const result = await service.listOpenTables(baseUser);
+
+    expect(prisma.virtualTable.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          isPrivate: false,
+          status: VirtualTableStatus.WAITING_FOR_PLAYERS
+        }
+      })
+    );
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: "table-public",
+        title: "Открытый стол",
+        seatsCount: 1,
+        ownerDisplayName: "Илья"
+      })
+    ]);
+    expect(result.items[0]).not.toHaveProperty("inviteCode");
+  });
+
+  it("joins a public open table by id", async () => {
+    const prisma = createPrismaMock();
+    const table = createTableRecord({
+      id: "table-open",
+      isPrivate: false,
+      seats: [createSeatRecord({ userId: "owner" })]
+    });
+    const newSeat = createSeatRecord({
+      id: "seat-new",
+      tableId: table.id,
+      userId: baseUser.id,
+      seatNumber: 2
+    });
+
+    prisma.virtualTable.findUnique.mockResolvedValue(table);
+    prisma.virtualSeat.create.mockResolvedValue(newSeat);
+
+    const service = new VirtualService(prisma as unknown as PrismaService);
+    const result = await service.joinOpenTable(baseUser, table.id);
+
+    expect(prisma.virtualSeat.create).toHaveBeenCalledWith({
+      data: {
+        tableId: table.id,
+        userId: baseUser.id,
+        displayName: "Денис",
+        seatNumber: 2,
+        role: VirtualSeatRole.PLAYER,
+        status: VirtualSeatStatus.ACTIVE,
+        stackChips: table.startingStackChips
+      }
+    });
+    expect(result).toEqual({
+      tableId: table.id,
+      seatId: "seat-new",
+      status: VirtualTableStatus.WAITING_FOR_PLAYERS
+    });
+  });
+
+  it("rejects private table from open join", async () => {
+    const prisma = createPrismaMock();
+    prisma.virtualTable.findUnique.mockResolvedValue(
+      createTableRecord({
+        isPrivate: true
+      })
+    );
+
+    const service = new VirtualService(prisma as unknown as PrismaService);
+
+    await expect(service.joinOpenTable(baseUser, "table-1")).rejects.toMatchObject({
+      code: VIRTUAL_ERROR_CODES.forbidden,
+      status: HttpStatus.FORBIDDEN
+    });
+    expect(prisma.virtualSeat.create).not.toHaveBeenCalled();
+  });
+
   it("rejects hand histories list for non participants", async () => {
     const prisma = createPrismaMock();
     const table = createTableRecord({
@@ -6887,6 +7016,7 @@ function createTableRecord(
     turnDurationSeconds: 30,
     reminderDelaySeconds: 15,
     timeoutAutoActionRule: TimeoutAutoActionRule.CHECK_OR_FOLD,
+    isPrivate: false,
     status: VirtualTableStatus.WAITING_FOR_PLAYERS,
     inviteCode: "AB12CD34",
     currentHandId: null,

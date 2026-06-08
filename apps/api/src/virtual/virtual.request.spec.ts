@@ -35,6 +35,27 @@ describe("virtual.request", () => {
       expect(winProbabilityEnabled).toBe(true);
     });
 
+    it("defaults private match flag to false when omitted", () => {
+      expect(
+        normalizeCreateVirtualTableRequest({
+          ...basePayload,
+          turnDurationSeconds: 30,
+          reminderDelaySeconds: 15
+        }).isPrivate
+      ).toBe(false);
+    });
+
+    it("accepts private match flag", () => {
+      expect(
+        normalizeCreateVirtualTableRequest({
+          ...basePayload,
+          isPrivate: true,
+          turnDurationSeconds: 30,
+          reminderDelaySeconds: 15
+        }).isPrivate
+      ).toBe(true);
+    });
+
     it("accepts short and large positive timer values", () => {
       expect(
         normalizeCreateVirtualTableRequest({

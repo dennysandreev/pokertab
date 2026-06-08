@@ -220,6 +220,7 @@ model VirtualTable {
   turnDurationSeconds    Int
   reminderDelaySeconds   Int
   timeoutAutoActionRule  TimeoutAutoActionRule @default(CHECK_OR_FOLD)
+  isPrivate              Boolean               @default(false)
   status                 VirtualTableStatus    @default(WAITING_FOR_PLAYERS)
   inviteCode             String                @unique
   currentHandId          String?
@@ -242,6 +243,7 @@ model VirtualTable {
   @@index([clubId])
   @@index([scheduledStartAt])
   @@index([status])
+  @@index([isPrivate, status])
   @@index([inviteCode])
 }
 

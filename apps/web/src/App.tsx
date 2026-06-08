@@ -133,6 +133,7 @@ import {
 import {
   CreateVirtualTableContainer,
   JoinVirtualTableContainer,
+  OpenVirtualTablesContainer,
   VirtualHandHistoryDetailContainer,
   VirtualLeaderboardContainer,
   VirtualLobbyContainer,
@@ -145,6 +146,7 @@ import {
   getCreateVirtualTableRoute,
   getJoinVirtualTableInviteRoute,
   getJoinVirtualTableRoute,
+  getOpenVirtualTablesRoute,
   getVirtualLeaderboardRoute,
   getVirtualLobbyRoute,
   getVirtualStatsRoute,
@@ -385,6 +387,7 @@ function AppShell(): JSX.Element {
           <Route path={getClubInviteRoute(":clubId")} element={<ClubInviteContainer />} />
           <Route path={getClubEventRoute(":clubId", ":eventId")} element={<ClubEventDetailsContainer />} />
           <Route path={getVirtualLobbyRoute()} element={<VirtualLobbyContainer />} />
+          <Route path={getOpenVirtualTablesRoute()} element={<OpenVirtualTablesContainer />} />
           <Route path={getCreateVirtualTableRoute()} element={<CreateVirtualTableContainer />} />
           <Route path={getJoinVirtualTableRoute()} element={<JoinVirtualTableContainer />} />
           <Route path="/poker/join/:inviteCode" element={<JoinVirtualTableContainer />} />
@@ -4968,6 +4971,10 @@ export function getChromeSubtitle(pathname: string): string {
 
   if (pathname === getCreateVirtualTableRoute()) {
     return "Новый стол";
+  }
+
+  if (pathname === getOpenVirtualTablesRoute()) {
+    return "Открытые столы";
   }
 
   if (pathname === getJoinVirtualTableRoute() || pathname.startsWith("/poker/join/")) {

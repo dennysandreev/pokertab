@@ -21,6 +21,7 @@ export type CreateVirtualTableFormValues = {
   reminderDelaySeconds: string;
   timeoutAutoActionRule: VirtualTimeoutAutoActionRule | "";
   winProbabilityEnabled: boolean;
+  isPrivate: boolean;
   clubId?: string;
   scheduledStartAt?: string;
   sendNotifications?: boolean;
@@ -57,7 +58,8 @@ export function buildCreateVirtualTablePayload(
     turnDurationSeconds: Number.parseInt(values.turnDurationSeconds.trim(), 10),
     reminderDelaySeconds: Number.parseInt(values.reminderDelaySeconds.trim(), 10),
     timeoutAutoActionRule: values.timeoutAutoActionRule as VirtualTimeoutAutoActionRule,
-    winProbabilityEnabled: values.winProbabilityEnabled
+    winProbabilityEnabled: values.winProbabilityEnabled,
+    isPrivate: values.isPrivate
   };
 
   const clubId = (values.clubId ?? "").trim();

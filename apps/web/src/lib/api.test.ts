@@ -12,6 +12,7 @@ import {
   getClubMembers,
   getClubs,
   getMyVirtualStats,
+  getOpenVirtualTables,
   getRooms,
   getVirtualHandHistories,
   getVirtualHandHistory,
@@ -20,6 +21,7 @@ import {
   getVirtualTable,
   getVirtualTables,
   joinClub,
+  joinOpenVirtualTable,
   joinVirtualTable,
   pauseVirtualTable,
   raiseVirtualBlinds,
@@ -72,9 +74,12 @@ describe("apiRequest", () => {
       turnDurationSeconds: 30,
       reminderDelaySeconds: 15,
       timeoutAutoActionRule: "CHECK_OR_FOLD",
-      winProbabilityEnabled: false
+      winProbabilityEnabled: false,
+      isPrivate: false
     });
+    await getOpenVirtualTables("token");
     await joinVirtualTable("token", { inviteCode: "AB12CD34" });
+    await joinOpenVirtualTable("token", "table-open");
     await getVirtualTable("token", "table-1");
     await startVirtualTable("token", "table-1");
     await startNextVirtualHand("token", "table-1");
@@ -125,7 +130,9 @@ describe("apiRequest", () => {
     ).toEqual([
       ["http://localhost:3000/api/virtual/tables", "GET"],
       ["http://localhost:3000/api/virtual/tables", "POST"],
+      ["http://localhost:3000/api/virtual/tables/open", "GET"],
       ["http://localhost:3000/api/virtual/tables/join", "POST"],
+      ["http://localhost:3000/api/virtual/tables/table-open/join-open", "POST"],
       ["http://localhost:3000/api/virtual/tables/table-1", "GET"],
       ["http://localhost:3000/api/virtual/tables/table-1/start", "POST"],
       ["http://localhost:3000/api/virtual/tables/table-1/hands/next", "POST"],
