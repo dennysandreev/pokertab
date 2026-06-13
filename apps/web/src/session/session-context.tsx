@@ -10,7 +10,11 @@ import React, {
 import { postTelegramAuth } from "@/lib/api";
 import { createInitialSessionState, type SessionState } from "@/lib/bootstrap";
 import { sendClientBootBeacon } from "@/lib/client-boot";
-import { initializeTelegramWebApp, waitForTelegramLaunchData } from "@/lib/telegram";
+import {
+  initializeTelegramWebApp,
+  loadTelegramWebAppSdk,
+  waitForTelegramLaunchData
+} from "@/lib/telegram";
 
 type SessionContextValue = {
   state: SessionState;
@@ -37,9 +41,13 @@ export function SessionProvider({
     let isMounted = true;
 
     sendClientBootBeacon("session-provider-mounted");
-    initializeTelegramWebApp();
 
-    void waitForTelegramLaunchData().then((launchData) => {
+    void loadTelegramWebAppSdk().then(async (sdkStatus) => {
+      sendClientBootBeacon(`telegram-sdk-${sdkStatus}`);
+      initializeTelegramWebApp();
+
+      const launchData = await waitForTelegramLaunchData();
+
       if (!isMounted) {
         return;
       }

@@ -40,6 +40,11 @@ const clubStartParamPrefixes = ["club_", "club-"] as const;
 
 const telegramLaunchWaitIntervalMs = 50;
 const telegramLaunchWaitTimeoutMs = 1500;
+const telegramSdkLoadTimeoutMs = 2500;
+const telegramSdkScriptId = "telegram-web-app-sdk";
+const telegramSdkScriptSrc = "/telegram-web-app.js";
+
+let telegramSdkLoadPromise: Promise<void> | null = null;
 
 export function getTelegramBackFallbackPath(pathname: string): string {
   if (/^\/players\/[^/]+$/.test(pathname)) {
@@ -85,6 +90,61 @@ export async function waitForTelegramLaunchData(
 
     readLaunchData();
   });
+}
+
+export async function loadTelegramWebAppSdk(
+  source: TelegramWindow | undefined = globalThis as TelegramWindow | undefined,
+  timeoutMs = telegramSdkLoadTimeoutMs
+): Promise<"ready" | "loaded" | "error" | "timeout" | "unavailable"> {
+  if (source?.Telegram?.WebApp) {
+    return "ready";
+  }
+
+  if (typeof document === "undefined") {
+    return "unavailable";
+  }
+
+  if (!telegramSdkLoadPromise) {
+    telegramSdkLoadPromise = new Promise((resolve) => {
+      const existingScript = document.getElementById(telegramSdkScriptId) as HTMLScriptElement | null;
+      const script = existingScript ?? document.createElement("script");
+      let isSettled = false;
+
+      const settle = (): void => {
+        if (isSettled) {
+          return;
+        }
+
+        isSettled = true;
+        resolve();
+      };
+
+      script.id = telegramSdkScriptId;
+      script.async = true;
+      script.src = telegramSdkScriptSrc;
+      script.addEventListener("load", settle, { once: true });
+      script.addEventListener("error", settle, { once: true });
+
+      if (!existingScript) {
+        document.body.appendChild(script);
+      }
+
+      window.setTimeout(settle, timeoutMs);
+    });
+  }
+
+  const timedOut = await Promise.race([
+    telegramSdkLoadPromise.then(() => false),
+    new Promise<boolean>((resolve) => {
+      window.setTimeout(() => resolve(true), timeoutMs);
+    })
+  ]);
+
+  if (source?.Telegram?.WebApp) {
+    return timedOut ? "timeout" : "loaded";
+  }
+
+  return timedOut ? "timeout" : "error";
 }
 
 export function getVirtualInviteCodeFromStartParam(
