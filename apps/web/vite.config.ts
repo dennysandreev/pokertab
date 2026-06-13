@@ -25,7 +25,7 @@ function moveEntryAssetsToBody(): Plugin {
 
       return withoutEntryTags.replace(
         '    <script src="/telegram-web-app.js"></script>',
-        `    ${styleTags.join("\n    ")}\n    <script src="/telegram-web-app.js"></script>\n    ${scriptTags.join("\n    ")}`
+        `    <script src="/telegram-web-app.js"></script>\n    ${scriptTags.join("\n    ")}\n    ${styleTags.join("\n    ")}`
       );
     }
   };
