@@ -1,9 +1,38 @@
 import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+
+function moveEntryAssetsToBody(): Plugin {
+  return {
+    name: "move-entry-assets-to-body",
+    enforce: "post",
+    transformIndexHtml(html) {
+      const styleTags: string[] = [];
+      const scriptTags: string[] = [];
+      const withoutEntryTags = html
+        .replace(/\n\s*<link rel="stylesheet" crossorigin href="\/assets\/[^"]+">/g, (tag) => {
+          styleTags.push(tag.trim());
+          return "";
+        })
+        .replace(/\n\s*<script type="module" crossorigin src="\/assets\/[^"]+"><\/script>/g, (tag) => {
+          scriptTags.push(tag.trim());
+          return "";
+        });
+
+      if (styleTags.length === 0 && scriptTags.length === 0) {
+        return html;
+      }
+
+      return withoutEntryTags.replace(
+        '    <script src="/telegram-web-app.js"></script>',
+        `    ${styleTags.join("\n    ")}\n    <script src="/telegram-web-app.js"></script>\n    ${scriptTags.join("\n    ")}`
+      );
+    }
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), moveEntryAssetsToBody()],
   build: {
     target: "es2019"
   },
